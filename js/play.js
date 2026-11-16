@@ -879,7 +879,7 @@ function onPointer() {
   if (menuHover) { SFX.select(); G.goTo('menu'); return; }
   if (mode === 'shop') { SHOP.onPointer(); return; }
   if (hoverBtn >= 0 && btns[hoverBtn]) { btns[hoverBtn].act(); return; }
-  if (hoverWBtn >= 0 && wbtns[hoverWBtn]) { const b = wbtns[hoverWBtn]; if (b.disabled) SFX.deny(); else b.act(); return; }
+  if (wbtns[hoverWBtn]) { const b = wbtns[hoverWBtn]; hoverWBtn = -1; if (b.disabled) SFX.deny(); else b.act(); return; }
   if (hoverWild >= 0 && canEditWilds()) { selWild = selWild === hoverWild ? -1 : hoverWild; SFX.select(); return; }
   if (selWild >= 0) { selWild = -1; return; }
   if (mode === 'intro' && enterT > 1) { setMode('ready'); return; }
@@ -894,7 +894,7 @@ function onKey(k) {
   if (mode === 'intro' && enterT > 1) { setMode('ready'); return; }
   rollAll();
 }
-const hot = () => menuHover || (mode === 'shop' ? SHOP.hot() : hover >= 0 || hoverBtn >= 0 || hoverPerk >= 0 || hoverWild >= 0 || hoverWBtn >= 0);
+const hot = () => menuHover || (mode === 'shop' ? SHOP.hot() : hover >= 0 || hoverBtn >= 0 || hoverPerk >= 0 || hoverWild >= 0 || !!wbtns[hoverWBtn]);
 
 return {
   enter, update, render, onPointer, onKey, hot, rollAll,

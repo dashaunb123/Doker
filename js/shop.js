@@ -247,7 +247,7 @@ function update(dt) {
     }
   }
   if (hover !== prevHover && hover >= 0) SFX.hover();
-  if (hoverBtn !== prevHoverBtn && hoverBtn >= 0 && !btns[hoverBtn].disabled) SFX.hover();
+  if (hoverBtn !== prevHoverBtn && btns[hoverBtn] && !btns[hoverBtn].disabled) SFX.hover();
   prevHover = hover; prevHoverBtn = hoverBtn;
 }
 
@@ -439,7 +439,8 @@ function render() {
 //  input
 // ------------------------------------------------------------
 function onPointer() {
-  if (hoverBtn >= 0) { const b = btns[hoverBtn]; if (b.disabled) return broke(-1); return b.act(); }
+  const b = btns[hoverBtn];
+  if (b) { hoverBtn = -1; if (b.disabled) return broke(-1); return b.act(); }
   if (faceFor) return;
   if (swap) { if (hover >= 0) swapSell(hover); return; }
   if (reveal && !reveal.done) return;
@@ -448,7 +449,8 @@ function onPointer() {
 }
 // no keyboard shortcut to leave: mashing space after a breach must not skip the shop
 function onKey() {}
-const hot = () => hover >= 0 || (hoverBtn >= 0 && !btns[hoverBtn].disabled);
+// btns is rebuilt every render, so hoverBtn can point past its end for a frame: always look it up safely
+const hot = () => hover >= 0 || (!!btns[hoverBtn] && !btns[hoverBtn].disabled);
 const isOpen = () => !!pack;
 
 return { enter, update, render, onPointer, onKey, hot, isOpen, debugOpen: openPack };
