@@ -700,7 +700,7 @@ function updateTrans(dt) {
   if (!trans.swapped && trans.t >= TRANS_HALF) {
     trans.swapped = true;
     state = trans.to;
-    if (state === 'play') { PLAY.enter(); MUSIC.play('table'); }
+    if (state === 'play') { PLAY.enter(); MUSIC.play(PLAY.track()); }
     else { menuT = 0; refreshButtons(); logo.landed = [0, 0, 0, 0, 0]; MUSIC.play('menu'); }
     glitchT = 0.2;
   }
@@ -921,7 +921,7 @@ document.addEventListener('pointerleave', () => { mouse.inside = false; });
 
 function startAudio() {
   SFX.init();
-  if (!MUSIC.name && state !== 'boot') MUSIC.play(state === 'play' ? 'table' : 'menu');
+  if (!MUSIC.name && state !== 'boot') MUSIC.play(state === 'play' ? PLAY.track() : 'menu');
 }
 
 addEventListener('pointerdown', e => {

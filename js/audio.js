@@ -176,6 +176,92 @@ const MUSIC = {
         [74, _, _, 78, _, _, 81, _, 78, _, 74, _, 71, _, 74, _],
       ],
     },
+
+    // ---- boss themes: each boss firewall has its own track ----
+    // DDOS / THE FLOOD — relentless and pounding, a flood of repeated notes (D phrygian, 150 bpm)
+    boss_ddos: {
+      bpm: 150,
+      chords: [[50, 53, 57, 62], [51, 55, 58, 63], [50, 53, 57, 62], [48, 52, 55, 60]],
+      kick: [0, 3, 4, 8, 11, 12, 14], snare: [4, 12], kickVol: 0.5,
+      hat: [0.03, 0.02, 0.03, 0.02, 0.03, 0.02, 0.03, 0.02, 0.03, 0.02, 0.03, 0.02, 0.03, 0.02, 0.03, 0.03],
+      perc: [6, 15], percHz: 2500, percVol: 0.1,
+      bass: [0, 0, 12, 0, 0, 0, 12, 0, 0, 0, 12, 0, 1, 0, 12, 0], bassType: 'sawtooth', bassVol: 0.12, bassLen: 0.9,
+      arp: [0, 0, 2, 0, 0, 0, 3, 0], arpOct: 1, arpVol: 0.025,
+      leadAlways: true, leadType: 'sawtooth', leadVol: 0.035, leadLen: 0.9,
+      lead: [
+        [74, 74, _, 74, 74, _, 77, _, 74, 74, _, 72, _, 74, _, _],
+        [75, 75, _, 75, 75, _, 79, _, 75, _, 74, _, 72, _, 70, _],
+        [74, 74, _, 74, 74, _, 81, _, 79, 77, _, 77, 74, _, _, _],
+        [72, _, 72, 72, _, 72, 74, _, 76, _, 77, _, 76, _, 74, _],
+      ],
+    },
+    // ENCRYPTION / CIPHER — cold and mysterious: tritones, a music-box lead (B minor, 100 bpm)
+    boss_encryption: {
+      bpm: 100,
+      chords: [[47, 50, 54, 59], [53, 57, 60, 65], [55, 58, 62, 67], [54, 58, 61, 64]],
+      kick: [0, 10], snare: [8], snareVol: 0.1,
+      hat: [0.02, 0, 0.01, 0, 0.02, 0, 0.01, 0.01, 0.02, 0, 0.01, 0, 0.02, 0, 0.01, 0.015],
+      perc: [3, 11], percHz: 9000, percVol: 0.04,
+      bass: [0, _, _, _, _, _, 6, _, 0, _, _, _, 12, _, 6, _], bassType: 'sine', bassVol: 0.25, bassLen: 3,
+      arp: [0, 2, 1, 3, 2, 0, 3, 1], arpOct: 2, arpType: 'triangle', arpVol: 0.03,
+      leadType: 'triangle', leadVol: 0.07, leadLen: 2.4,
+      lead: [
+        [83, _, _, 77, _, _, 78, _, _, 83, _, 86, _, _, 85, _],
+        [84, _, _, 77, _, _, 81, _, _, 84, _, _, 89, _, _, _],
+        [86, _, _, 79, _, _, 82, _, 86, _, 85, _, 82, _, 79, _],
+        [85, _, 82, _, 78, _, 76, _, 73, _, _, 70, _, _, _, _],
+      ],
+    },
+    // LAG / BUFFER — slow and sluggish, notes that sag and stutter (C minor, 70 bpm)
+    boss_lag: {
+      bpm: 70,
+      chords: [[48, 51, 55, 60], [44, 48, 51, 56], [53, 56, 60, 65], [43, 47, 50, 55]],
+      kick: [0, 7, 9], snare: [8], snareHz: 900,
+      hat: [0.015, 0, 0, 0.01, 0, 0, 0.015, 0, 0, 0.01, 0, 0, 0.015, 0, 0.01, 0.01],
+      bass: [0, _, _, _, _, _, _, 0, 0, _, _, _, 7, _, _, _], bassType: 'sawtooth', bassVol: 0.1, bassLen: 4,
+      arp: [0, _, _, 1, _, _, 2, _, _, 3, _, _, 2, _, _, _], arpOct: 1, arpVol: 0.03,
+      leadAlways: true, leadType: 'square', leadVol: 0.04, leadLen: 3, leadBend: 2,
+      lead: [
+        [72, _, _, _, 72, 72, _, _, 70, _, _, _, 67, _, _, _],
+        [68, _, _, _, 67, _, 67, 67, _, _, 63, _, _, _, _, _],
+        [65, _, _, _, 68, _, _, _, 72, 72, 72, _, _, 70, _, _],
+        [67, _, _, _, 66, _, _, _, 65, _, _, _, 62, _, _, _],
+      ],
+    },
+    // SANDBOX / THE WARDEN — a stern march, snare rolls and jail-cell clanks (E phrygian, 112 bpm)
+    boss_sandbox: {
+      bpm: 112,
+      chords: [[52, 55, 59, 64], [53, 57, 60, 65], [52, 55, 59, 64], [50, 53, 57, 62]],
+      kick: [0, 8], snare: [4, 12, 13, 14, 15], snareVol: 0.14,
+      hat: [0.02, 0, 0.02, 0, 0.02, 0, 0.02, 0, 0.02, 0, 0.02, 0, 0.02, 0, 0.02, 0],
+      perc: [6, 10], percHz: 1200, percVol: 0.12,
+      bass: [0, _, _, _, 7, _, _, _, 0, _, _, _, 7, _, 5, _], bassType: 'square', bassVol: 0.08, bassLen: 1.2,
+      arp: [0, _, 1, _, 2, _, 1, _], arpOct: 1, arpVol: 0.02,
+      leadAlways: true, leadType: 'square', leadVol: 0.04, leadLen: 1.5,
+      lead: [
+        [76, _, _, 76, 77, _, 76, _, 74, _, _, _, 76, _, _, _],
+        [77, _, _, 77, 79, _, 77, _, 76, _, 74, _, 72, _, _, _],
+        [76, _, _, 76, 79, _, 83, _, 81, _, 79, _, 77, _, 76, _],
+        [74, _, 74, _, 72, _, 71, _, 69, _, _, _, 64, _, _, _],
+      ],
+    },
+    // HONEYPOT / SWEETTOOTH — a too-sweet bouncy tune that turns sour (F major -> Db, 108 bpm)
+    boss_honeypot: {
+      bpm: 108,
+      chords: [[53, 57, 60, 65], [58, 62, 65, 70], [49, 53, 56, 61], [48, 52, 55, 61]],
+      kick: [0, 6, 8], snare: [4, 12], snareVol: 0.1,
+      hat: [0.02, 0, 0.015, 0, 0.02, 0, 0.015, 0, 0.02, 0, 0.015, 0, 0.02, 0, 0.015, 0.01],
+      perc: [2, 10], percHz: 5000, percVol: 0.05,
+      bass: [0, _, 7, _, 12, _, 7, _, 0, _, 7, _, 12, _, 7, _], bassType: 'triangle', bassVol: 0.22, bassLen: 1,
+      arp: [0, 2, 3, 2], arpOct: 2, arpType: 'triangle', arpVol: 0.025,
+      leadAlways: true, leadType: 'triangle', leadVol: 0.08, leadLen: 1.4,
+      lead: [
+        [81, _, 77, _, 81, _, 84, _, 82, _, 81, _, 77, _, _, _],
+        [82, _, 79, _, 82, _, 86, _, 84, _, 82, _, 81, _, _, _],
+        [80, _, 77, _, 73, _, 77, _, 80, _, 85, _, 84, _, _, _],
+        [79, _, 76, _, 73, _, 70, _, 72, _, _, 73, _, 72, _, _],
+      ],
+    },
   },
 
   ensure() {
@@ -217,16 +303,18 @@ const MUSIC = {
     const bar = Math.floor(step / 16), st = step % 16;
     const ch = s.chords[bar];
     const o = { dest: this.gain, delay: Math.max(0, time - SFX.ac.currentTime) };
-    if (s.kick.includes(st)) SFX.tone(150, 0.16, { ...o, type: 'sine', to: 40, vol: 0.4 });
-    if (s.snare.includes(st)) SFX.noise(0.1, { ...o, freq: 1800, ftype: 'bandpass', vol: 0.16 });
+    if (s.kick.includes(st)) SFX.tone(s.kickHz || 150, 0.16, { ...o, type: 'sine', to: 40, vol: s.kickVol || 0.4 });
+    if (s.snare.includes(st)) SFX.noise(0.1, { ...o, freq: s.snareHz || 1800, ftype: 'bandpass', vol: s.snareVol || 0.16 });
     if (s.hat[st]) SFX.noise(0.03, { ...o, freq: 7000, vol: s.hat[st] });
-    if (s.bass[st] != null) SFX.tone(mtof(ch[0] - 12 + s.bass[st]), spb * 1.6, { ...o, type: 'triangle', vol: 0.22 });
+    // optional extra hit (claps, clanks, glitches): perc = [steps], percHz
+    if (s.perc && s.perc.includes(st)) SFX.noise(0.05, { ...o, freq: s.percHz || 3000, ftype: 'highpass', vol: s.percVol || 0.08 });
+    if (s.bass[st] != null) SFX.tone(mtof(ch[0] - 12 + s.bass[st]), spb * (s.bassLen || 1.6), { ...o, type: s.bassType || 'triangle', vol: s.bassVol || 0.22 });
     const ai = s.arp[st % s.arp.length];
-    if (ai != null) SFX.tone(mtof(ch[ai] + 12 * s.arpOct), spb * 0.9, { ...o, type: 'square', vol: s.arpVol });
-    // the lead melody only plays every other loop, so the track breathes
-    if (s.lead && this.loop % 2 === 1) {
+    if (ai != null) SFX.tone(mtof(ch[ai] + 12 * s.arpOct), spb * 0.9, { ...o, type: s.arpType || 'square', vol: s.arpVol });
+    // the lead melody plays every other loop (or every loop with leadAlways), so the track breathes
+    if (s.lead && (s.leadAlways || this.loop % 2 === 1)) {
       const n = s.lead[bar][st];
-      if (n) SFX.tone(mtof(n), spb * 1.8, { ...o, type: 'square', vol: 0.045 });
+      if (n) SFX.tone(mtof(n), spb * (s.leadLen || 1.8), { ...o, type: s.leadType || 'square', vol: s.leadVol || 0.045, to: s.leadBend ? mtof(n - s.leadBend) : undefined });
     }
   },
 };

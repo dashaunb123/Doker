@@ -58,6 +58,8 @@ function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /*
 const slotX = i => SX0 + i * (SLOT + GAP);
 const wildX = i => WX0 + i * (WW + WG);
 const canEditWilds = () => mode === 'ready' || mode === 'intro';
+/** Which music should be playing: the boss's own track while it's alive. */
+const track = () => (run && run.boss && BOSS.active() && mode !== 'shop' ? 'boss_' + run.boss : 'table');
 /** What the boss actor (js/boss.js) is allowed to touch on the table. */
 const bossHooks = {
   TX, TY, TW, TH, dieX: i => dieX(i), dieTop: SY + 6, resultY: 120,
@@ -152,6 +154,7 @@ function continueRun() {
     result = null; cur = null; reward = null; seq = []; seqT = 0;
     dice.forEach(dd => (dd.scoring = false));
     BOSS.setup(run, bossHooks); BOSS.resume();
+    MUSIC.play(track());
     setMode('intro');
   }
   return true;
@@ -178,6 +181,7 @@ function startRound(r) {
   result = null; cur = null; reward = null; seq = []; seqT = 0;
   dice.forEach(d => (d.scoring = false));
   BOSS.setup(run, bossHooks);
+  MUSIC.play(track());
   if (run.boss) { setMode('bossintro'); BOSS.intro(() => setMode('ready')); }
   else { setMode('intro'); if (r > 1) SFX.whoosh(); }
   saveRun('round');
@@ -697,9 +701,11 @@ function drawSlot(i, off) {
   const { rrect, rect, ctx, text, T } = G;
   const d = dice[i];
   const x = slotX(i), y = SY + off;
+  if (BOSS.looming) ctx.globalAlpha = 0.5;      // see-through slots so the boss shows behind the dice
   rrect(x - 1, y - 1, SLOT + 2, SLOT + 2, PAL.ink);
   rrect(x, y, SLOT, SLOT, '#241a4a');
   rect(x + 2, y + 2, SLOT - 4, SLOT - 4, '#0b0920');
+  ctx.globalAlpha = 1;
   ctx.fillStyle = '#18133a';
   for (let gy = y + 4; gy < y + SLOT - 3; gy += 4)
     for (let gx = x + 4; gx < x + SLOT - 3; gx += 4) ctx.fillRect(gx, gy, 1, 1);
@@ -891,6 +897,7 @@ function render() {
   }
 
   drawTable();
+  BOSS.drawBack();          // boss rounds: the lair, its veins, and the boss looming behind the dice
   drawWildRow();
   for (let i = 0; i < N; i++) {
     const p = slotDrop(i);
@@ -955,6 +962,7 @@ return {
   // dev hooks for testing
   get run() { return run; },
   debugShop() { openShop(null); },
+  track,
   debugRound(r, boss) { if (boss) run.bosses[r] = boss; startRound(r); },
   hasSave: () => !!loadSave(),
   queueContinue() { pendingContinue = true; },
