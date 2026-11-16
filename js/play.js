@@ -40,6 +40,18 @@ const badgePop = new Map();
 let felt = null;
 let auto = false;
 
+let pendingContinue = false;
+
+// ---------- autosave (so a crash or a trip to the menu never wipes a run) ----------
+const SAVE_KEY = 'doker.save.v1';
+function saveRun(phase, extra) {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, phase, run, ...extra })); } catch (e) { /* storage blocked */ }
+}
+function loadSave() {
+  try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); return d && d.v === 1 && d.run ? d : null; } catch (e) { return null; }
+}
+function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } }
+
 const slotX = i => SX0 + i * (SLOT + GAP);
 const dieX = i => slotX(i) + SLOT / 2;
 const slotDrop = i => G.clamp((enterT - 0.15 - i * 0.07) / 0.45, 0, 1);
@@ -77,7 +89,6 @@ function buildFelt() {
     g.fillStyle = '#1a5c40'; g.fillRect(x - 1, y - 1, 3, 3);
     px(x, y, '#2f8f5f');
   }
-  drawText(g, '* HOUSE OF BONES *', TW / 2, 6, '#1d6444', { align: 'center' });
   g.clearRect(0, 0, 1, 1); g.clearRect(TW - 1, 0, 1, 1); g.clearRect(0, TH - 1, 1, 1); g.clearRect(TW - 1, TH - 1, 1, 1);
   return c;
 }
@@ -93,7 +104,28 @@ function enter() {
     face: i + 1, theme: 'bone', phase: 'idle', t: 0, delay: 0, final: 1, flipTo: 0, flips: 0,
     h: 0, sq: 1, sx: 1, sy: 1, jx: 0, flash: 0, pop: 0, trail: [], scoring: false, label: '', entered: false,
   }));
+  if (pendingContinue && continueRun()) { pendingContinue = false; return; }
+  pendingContinue = false;
   newRun();
+}
+
+/** Resume the autosaved run. Returns false if there is nothing (valid) to resume. */
+function continueRun() {
+  const d = loadSave();
+  if (!d) return false;
+  run = d.run;
+  // keep new item ids unique past the restored ones
+  for (const p of run.perks) if (p.uid > _uid) _uid = p.uid;
+  if (d.shop) for (const it of [...(d.shop.items || []), ...((d.shop.pack && d.shop.pack.items) || [])]) if (it && it.uid > _uid) _uid = it.uid;
+  if (d.phase === 'shop') { shownScore = run.score; openShop(d.shop); }
+  else if (d.phase === 'cleared') { shownScore = run.score; nextFirewall(); }
+  else {
+    shownScore = run.score;
+    result = null; cur = null; reward = null; seq = []; seqT = 0;
+    dice.forEach(dd => (dd.scoring = false));
+    setMode('intro');
+  }
+  return true;
 }
 
 function newRun() {
@@ -115,6 +147,7 @@ function startRound(r) {
   dice.forEach(d => (d.scoring = false));
   setMode('intro');
   if (r > 1) SFX.whoosh();
+  saveRun('round');
 }
 
 function setMode(m) { mode = m; modeT = 0; btns = []; hoverBtn = prevHoverBtn = -1; }
@@ -132,6 +165,7 @@ function rollAll() {
   }));
   SFX.rollStart();
   G.glitch(0.08);
+  saveRun('round');
 }
 
 // ------------------------------------------------------------
@@ -208,7 +242,7 @@ function startScoring() {
 function endRoll() {
   if (run.score >= run.target) breach();
   else if (run.rollsLeft <= 0) fail();
-  else setMode('ready');
+  else { setMode('ready'); saveRun('round'); }
 }
 
 function breach() {
@@ -222,21 +256,26 @@ function breach() {
   G.flash(0.35); G.glitch(0.25);
   for (let i = 0; i < N; i++) burst(i, 14, 1.8);
   rows.forEach((_, i) => at(0.45 + i * 0.3, () => { reward.shown = i + 1; SFX.coin(); }));
-  at(0.45 + rows.length * 0.3, () => { reward.shown = rows.length + 1; run.money += reward.total; SFX.select(); });
+  at(0.45 + rows.length * 0.3, () => { reward.shown = rows.length + 1; run.money += reward.total; SFX.select(); saveRun('cleared'); });
 }
 
 function fail() {
   setMode('failed');
+  clearSave();
   SFX.fail();
   G.glitch(0.7); G.shake(5);
 }
 
 function nextFirewall() {
   SFX.select();
-  if (run.round >= RULES.ROUNDS) { setMode('won'); SFX.hand(7); G.flash(0.7); G.glitch(0.5); return; }
-  setMode('shop');
+  if (run.round >= RULES.ROUNDS) { clearSave(); setMode('won'); SFX.hand(7); G.flash(0.7); G.glitch(0.5); return; }
   G.glitch(0.3); SFX.whoosh();
-  SHOP.enter(run, () => { G.glitch(0.3); startRound(run.round + 1); });
+  openShop(null);
+}
+
+function openShop(snap) {
+  setMode('shop');
+  SHOP.enter(run, () => { G.glitch(0.3); startRound(run.round + 1); }, snapShop => saveRun('shop', { shop: snapShop }), snap);
 }
 
 // ------------------------------------------------------------
@@ -443,10 +482,7 @@ function drawSidebar() {
 // ------------------------------------------------------------
 function drawPerkStrip() {
   const { rrect, rect, text } = G;
-  if (!run.perks.length) {
-    text('NO PERKS YET // BUY THEM IN THE BLACK MARKET', CX, PSY + 8, '#3f3570', { align: 'center' });
-    return;
-  }
+  if (!run.perks.length) return;
   const max = BADGES_PER_ROW * 2;
   run.perks.slice(0, max).forEach((p, k) => {
     const b = badgeXY(k);
@@ -516,13 +552,6 @@ function drawSlot(i, off) {
   else if (hover >= 0) { col = hover === i ? PAL.green : PAL.mgreen; e = hover === i ? 1 + Math.round(Math.abs(Math.sin(T * 8))) : 0; }
   else if (d.phase === 'air' || d.phase === 'wait') col = PAL.mgreen;
   drawBrackets(x, y, SLOT, SLOT, col, e);
-
-  text('0' + (i + 1), x + 1, y + SLOT + 4, '#5a4c99');
-  let label, lc;
-  if (d.phase === 'air') { label = '0X' + d.label; lc = PAL.mint; }
-  else if (d.phase === 'wait') { label = '....'; lc = PAL.mgreen; }
-  else { label = '[' + d.face + ']'; lc = d.scoring && result ? result.col : PAL.white; }
-  text(label, x + SLOT - 1, y + SLOT + 4, lc, { align: 'right' });
 }
 
 function drawDie(i, off) {
@@ -649,7 +678,6 @@ function drawHUD() {
   rect(0, 15, W, 1, PAL.purple);
   rrect(3, 2, 46, 11, menuHover ? PAL.green : '#2e2260');
   text('< MENU', 6, 4, menuHover ? PAL.ink : PAL.white);
-  text(mode === 'shop' ? '~/DOKER/BLACK-MARKET' : '~/DOKER/TABLE', CX, 4, mode === 'shop' ? PAL.magenta : PAL.green, { align: 'center' });
   text('RUN $' + run.money, W - 5, 4, PAL.gold, { align: 'right' });
 }
 
@@ -737,6 +765,8 @@ return {
   set auto(v) { auto = v; },
   // dev hooks for testing
   get run() { return run; },
-  debugShop() { setMode('shop'); SHOP.enter(run, () => startRound(run.round + 1)); },
+  debugShop() { openShop(null); },
+  hasSave: () => !!loadSave(),
+  queueContinue() { pendingContinue = true; },
 };
 })();

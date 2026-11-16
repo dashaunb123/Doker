@@ -82,11 +82,19 @@ function itemCard(it, x, y, w, h, o = {}) {
 
   const code = itemCode(it);
   const jit = r === 5 && Math.random() < 0.15 ? (Math.random() < 0.5 ? -2 : 2) : 0;
-  if (r === 5 && jit) text(code, x + w / 2 - jit, y + h / 2 - 8, PAL.cyan, { align: 'center', scale: 2 });
-  text(code, x + w / 2 + jit, y + h / 2 - 8, col, { align: 'center', scale: 2, shadow: PAL.ink });
+  const art = it.kind === 'patch' ? CARD_ART[it.key] : CARD_ART[it.id];
+  if (art) {
+    const ax = Math.round(x + (w - art.width) / 2), ay = y + 11 + Math.max(0, Math.floor((h - 27 - art.height) / 2));
+    if (r === 5 && jit) { ctx.globalAlpha = 0.6; G.blit(tinted(art, PAL.cyan), ax - jit, ay); ctx.globalAlpha = 1; }
+    G.blit(art, ax + jit, ay);
+  } else {
+    if (r === 5 && jit) text(code, x + w / 2 - jit, y + h / 2 - 8, PAL.cyan, { align: 'center', scale: 2 });
+    text(code, x + w / 2 + jit, y + h / 2 - 8, col, { align: 'center', scale: 2, shadow: PAL.ink });
+  }
 
-  if (it.kind === 'patch') text('+' + PATCH_BOOST[r].lv + ' LV', x + w / 2, y + h / 2 + 9, PAL.white, { align: 'center' });
-  else text(it.revealed ? 'OK' : '??', x + w / 2, y + h / 2 + 9, it.revealed ? PAL.green : '#5a4c99', { align: 'center' });
+  const ty = art ? y + h - 17 : y + h / 2 + 9;
+  if (it.kind === 'patch') text('+' + PATCH_BOOST[r].lv + ' LV', x + w / 2, ty, PAL.white, { align: 'center' });
+  else text(it.revealed ? 'OK' : perkShort(it), x + w / 2, ty, it.revealed ? PAL.green : PAL.white, { align: 'center' });
   rarityPips(r, x + w / 2, y + h - 7);
 
   // legendary shine sweep

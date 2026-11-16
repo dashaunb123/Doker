@@ -23,6 +23,10 @@ Controls: mouse, or **Space** = roll · **Esc** = back to menu · **M** = mute a
 | Credits ($) + Black Market shop between firewalls | Done |
 | Packs with decrypt reveal (Perk, Patch, Mystery, 2 Mega packs) | Done |
 | All 14 perks + rarity-scaled patches (hand level-ups) | Done |
+| Perk values shown on cards before you pick (no hidden stats) | Done |
+| Pixel-art icons for every patch + perk card (`js/cardart.js`, preview in `art-gallery.html`) | Done |
+| Autosave + CONTINUE on the menu; crash guard keeps the game running after an error | Done |
+| Decluttered table (no slot labels under dice, no HOUSE OF BONES / TABLE text) | Done |
 | Wildcards (20 joker-style cards, limited slots, selling) | **Next** |
 | Boss firewalls (rounds 4 and 8 with rule twists) | Planned |
 | Exploits, upgradable dice, starting rigs, Dealer reactions | Planned |
@@ -41,15 +45,22 @@ Plain `<script>` files (no modules, so it runs from `file://`). Load order matte
 |---|---|
 | `js/font.js` | Hand-made 5×7 bitmap font + `drawText()` |
 | `js/sprites.js` | All pixel art built pixel-by-pixel: dice, logo, cards, chips, mascot, laptop, cursor |
+| `js/cardart.js` | Card icons (rows of characters + palette), one per patch hand / perk id → `CARD_ART` |
 | `js/audio.js` | `SFX` (synth sound effects) and `MUSIC` (step sequencer + 2 songs) |
 | `js/rules.js` | Run constants, hand table (`HANDS`), `evaluateDice()` |
 | `js/items.js` | Rarity, perk/patch definitions, packs, and the perk engine (`scoreRoll`, `dieWeights`, …) |
 | `js/ui.js` | Shared drawing: panels, buttons, item cards, pack art, info box |
 | `js/shop.js` | Black Market + pack opening |
-| `js/play.js` | The table: run flow, dice animation, scoring sequence, sidebar, perk strip |
+| `js/play.js` | The table: run flow, dice animation, scoring sequence, sidebar, perk strip, autosave (`localStorage` key `doker.save.v1`) |
 | `js/menu.js` | Boot + menu scene, main loop, input, scene transitions, shared helpers (`window.G`) |
 
 Internal resolution is 384×216, scaled up in whole-pixel steps.
+
+`art-gallery.html` (double-click) shows every card icon large and on its in-game card, per rarity.
+
+**Autosave:** saved at round start, after every roll (the roll is spent the moment the dice leave), after a breach
+payout, and after every Black Market action (stock and open packs are restored). Cleared on win/loss.
+The last uncaught error is kept in `localStorage['doker.lastError']`.
 
 ## Dev URL flags (for testing)
 
@@ -66,7 +77,7 @@ Example: `index.html?play&perks=14&auto&ff=60`
 ## Decisions made without the user (worth confirming)
 
 - **Corrupted perks** (except Streak): ~1.6× Legendary numbers, catch = −1 roll per firewall.
-- Patch cards show their boost up front (it's fixed by rarity); only Corrupted hides the hand it lowers.
+- All card values are visible before you pick (the user asked for no hidden stats). Exceptions that are part of a perk's design: Lucky Number's target below Legendary, Corrupted Streak's face, Corrupted patches' lowered hand.
 - No keyboard shortcut leaves the shop (so mashing Space can't skip it).
 - Balance: with no build, runs die around firewall 3–4 — intentional.
 
@@ -77,20 +88,6 @@ Example: `index.html?play&perks=14&auto&ff=60`
 2. **Boss firewalls** on rounds 4 and 8.
 3. Playtest the sound/music levels and the overall balance.
 
-## Getting it into git
+## Git
 
-Git is **not installed** on this machine yet. Once it is (`winget install --id Git.Git -e`,
-then reopen the terminal):
-
-```powershell
-cd C:\Users\dashbarn\Desktop\Doker
-git init
-git config user.name "Your Name"
-git config user.email "you@example.com"
-git add .
-git commit -m "Doker: menu, table, run loop, Black Market, packs, perks, patches"
-```
-
-To put it on GitHub: create an empty repo on github.com, then
-`git remote add origin <repo URL>` and `git push -u origin main`
-(use `git branch -M main` first if the branch is named `master`).
+Repo: https://github.com/dashaunb123/Doker (branch `main`). Work happens on feature branches.

@@ -128,6 +128,19 @@ function itemName(it) { return it.kind === 'perk' ? PERK_DEFS[it.id].name : HAND
 function itemCode(it) { return it.kind === 'perk' ? PERK_DEFS[it.id].code : PATCH_CODE[it.key]; }
 function itemPrice(it) { return RARITY.price[it.rarity]; }
 
+/** Short headline number for a perk card face (e.g. X2.5, +20, 15%). */
+function perkShort(it) {
+  const s = it.stats;
+  switch (it.id) {
+    case 'overclock': case 'lastcall': case 'echo': return 'X' + fmtMult(s.x);
+    case 'hothand': return '+' + fmtMult(s.amt);
+    case 'loaded': return s.face + ':+' + s.pct + '%';
+    case 'inflation': return s.face + ':+' + s.amt;
+    case 'streak': case 'bitflip': case 'interest': case 'recursion': return (it.id === 'streak' ? '+' : '') + s.pct + '%';
+    default: return '+' + s.amt;
+  }
+}
+
 function itemDesc(it, show, run) {
   if (it.kind === 'perk') {
     let d = PERK_DEFS[it.id].desc(it.stats, show);

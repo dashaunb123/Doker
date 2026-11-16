@@ -199,14 +199,24 @@ function drawLogo() {
 // ============================================================
 //  BUTTONS
 // ============================================================
-const BX = 144, BY = 74, BWD = 96, BHT = 15, BSTEP = 19;
-const BUTTONS = [
+const BX = 144, BWD = 96, BHT = 15;
+let BY = 74, BSTEP = 19;
+const BTN_CONTINUE = { label: 'CONTINUE', base: '#b8860b', hi: '#feae34', dark: '#5c4306', act: actContinue };
+const BTN_BASE = [
   { label: 'PLAY',       base: '#1e8c4f', hi: '#4dff88', dark: '#0f4d2b', act: actPlay },
   { label: 'OPTIONS',    base: '#3b5dc9', hi: '#7d9bff', dark: '#1f2f6b', act: actOptions },
   { label: 'COLLECTION', base: '#8a3bd4', hi: '#c27bff', dark: '#47206e', act: actCollection },
   { label: 'QUIT',       base: '#c42f3c', hi: '#ff6b75', dark: '#6b1820', act: actQuit },
 ];
-const btnHoverT = [0, 0, 0, 0];
+let BUTTONS = BTN_BASE;
+const btnHoverT = [0, 0, 0, 0, 0];
+/** Show CONTINUE on top when there is an autosaved run (buttons pack a little tighter). */
+function refreshButtons() {
+  const has = PLAY.hasSave();
+  BUTTONS = has ? [BTN_CONTINUE, ...BTN_BASE] : BTN_BASE;
+  BY = has ? 72 : 74; BSTEP = has ? 16 : 19;
+  sel = 0;
+}
 let pressedBtn = -1, pressT = 0;
 
 function hitButton(x, y) {
@@ -250,6 +260,12 @@ function drawButtons() {
   }
 }
 
+function actContinue() {
+  shake = 3; SFX.select();
+  termPush('> ./DOKER --RESUME');
+  PLAY.queueContinue();
+  goTo('play');
+}
 function actPlay() {
   shake = 3; SFX.select();
   termPush('> ./DOKER --NEW-RUN');
@@ -654,6 +670,7 @@ function renderBoot() {
 
 function startMenu() {
   state = 'menu'; menuT = 0;
+  refreshButtons();
   glitchT = 0.45; flash = 0.8;
   SFX.boot();
   MUSIC.play('menu');
@@ -684,7 +701,7 @@ function updateTrans(dt) {
     trans.swapped = true;
     state = trans.to;
     if (state === 'play') { PLAY.enter(); MUSIC.play('table'); }
-    else { menuT = 0; logo.landed = [0, 0, 0, 0, 0]; MUSIC.play('menu'); }
+    else { menuT = 0; refreshButtons(); logo.landed = [0, 0, 0, 0, 0]; MUSIC.play('menu'); }
     glitchT = 0.2;
   }
   if (trans.t >= TRANS_HALF * 2) trans = null;
@@ -853,11 +870,31 @@ if (params.has('ff')) {
 }
 
 let last = performance.now();
+// Crash guard: an error in one frame must never freeze the game. The run is autosaved,
+// so the player can always press ESC -> menu -> CONTINUE.
+let crashMsg = '', crashT = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  update(dt);
-  render();
+  try {
+    update(dt);
+    render();
+  } catch (e) {
+    console.error(e);
+    crashMsg = (e && e.message ? e.message : String(e)).toUpperCase().slice(0, 60);
+    crashT = 6;
+    try { localStorage.setItem('doker.lastError', (e && e.stack) || String(e)); } catch (_) { /* ignore */ }
+    for (let i = 0; i < 16; i++) ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+  if (crashT > 0) {
+    crashT -= dt;
+    try {
+      rect(0, H - 22, W, 22, '#2a0610');
+      text('ERROR: ' + crashMsg, 4, H - 19, '#ff6b75');
+      text('PROGRESS IS SAVED. ESC -> MENU -> CONTINUE', 4, H - 9, PAL.gold);
+    } catch (_) { /* ignore */ }
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

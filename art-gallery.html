@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DOKER Card Art</title>
+<style>
+  :root { --bg: #07061a; --panel: #120e28; --line: #2e2260; --text: #e6e6ef; --dim: #8a7fc0; --green: #4dff88; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 ui-monospace, Menlo, Consolas, monospace; }
+  header { padding: 24px 16px 8px; max-width: 1200px; margin: 0 auto; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: 2px; color: var(--green); }
+  header p { margin: 6px 0 0; color: var(--dim); }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .bar button { background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 6px 12px; font: inherit; cursor: pointer; border-radius: 4px; }
+  .bar button.on { border-color: var(--green); color: var(--green); }
+  h2 { max-width: 1200px; margin: 22px auto 8px; padding: 0 16px; font-size: 15px; color: var(--dim); letter-spacing: 2px; }
+  .grid { max-width: 1200px; margin: 0 auto; padding: 0 16px 24px; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .row { display: flex; gap: 12px; align-items: flex-start; }
+  canvas { image-rendering: pixelated; display: block; }
+  .big { background: #15112c; border-radius: 4px; width: 100%; height: auto; }
+  .name { font-weight: bold; letter-spacing: 1px; }
+  .sub { color: var(--dim); font-size: 12px; }
+  .desc { font-size: 12px; color: #c9c3ea; }
+  .missing { color: #ff6b75; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>DOKER // CARD ART</h1>
+  <p>Every patch and perk icon. Big view on top; below it, the card as it looks in game (scaled 3×). Switch rarity to see the card colours.</p>
+  <div class="bar" id="rar"></div>
+</header>
+<h2>PATCHES (HAND UPGRADES)</h2>
+<div class="grid" id="patches"></div>
+<h2>PERKS</h2>
+<div class="grid" id="perks"></div>
+
+<script src="js/font.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/cardart.js"></script>
+<script src="js/rules.js"></script>
+<script src="js/items.js"></script>
+<script>
+'use strict';
+let rarity = 2;
+
+function bigCanvas(img) {
+  const Z = 6, c = document.createElement('canvas');
+  c.width = 36 * Z; c.height = 22 * Z; c.className = 'big';
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  g.fillStyle = '#15112c'; g.fillRect(0, 0, c.width, c.height);
+  if (img) g.drawImage(img, Math.round((36 - img.width) / 2) * Z, Math.round((22 - img.height) / 2) * Z, img.width * Z, img.height * Z);
+  return c;
+}
+
+// Mirrors UI.itemCard's layout (40x54 pack card) without needing the game loop.
+function cardCanvas(it) {
+  const W = 40, H = 54, S = 3, col = RARITY.col[it.rarity];
+  const [tmp, t] = newCanvas(W, H);
+  t.fillStyle = PAL.ink; t.fillRect(0, 0, W, H);
+  t.fillStyle = col; t.fillRect(1, 0, W - 2, H); t.fillRect(0, 1, W, H - 2);
+  t.fillStyle = '#15112c'; t.fillRect(1, 1, W - 2, H - 2);
+  t.fillStyle = col; t.fillRect(1, 1, W - 2, 9);
+  drawText(t, it.kind === 'perk' ? 'PERK' : 'PATCH', W / 2, 2, PAL.ink, { align: 'center' });
+  const art = CARD_ART[it.kind === 'patch' ? it.key : it.id];
+  if (art) t.drawImage(art, Math.round((W - art.width) / 2), 11 + Math.max(0, Math.floor((H - 27 - art.height) / 2)));
+  else drawText(t, itemCode(it), W / 2, H / 2 - 8, col, { align: 'center', scale: 2 });
+  const label = it.kind === 'patch' ? '+' + PATCH_BOOST[it.rarity].lv + ' LV' : perkShort(it);
+  drawText(t, label, W / 2, art ? H - 17 : H / 2 + 9, PAL.white, { align: 'center' });
+  const n = it.rarity === 5 ? 5 : it.rarity + 1, tw = n * 5 - 2;
+  for (let k = 0; k < n; k++) { t.fillStyle = it.rarity === 5 ? PAL.magenta : col; t.fillRect(Math.round(W / 2 - tw / 2) + k * 5, H - 7, 3, 3); }
+  const c = document.createElement('canvas'); c.width = W * S; c.height = H * S;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(tmp, 0, 0, W * S, H * S);
+  return c;
+}
+
+function tile(it, title, sub, desc) {
+  const art = CARD_ART[it.kind === 'patch' ? it.key : it.id];
+  const el = document.createElement('div'); el.className = 'tile';
+  const row = document.createElement('div'); row.className = 'row';
+  const txt = document.createElement('div');
+  txt.innerHTML = `<div class="name"></div><div class="sub"></div><div class="desc"></div>` + (art ? '' : '<div class="missing">NO ART YET</div>');
+  txt.querySelector('.name').textContent = title;
+  txt.querySelector('.sub').textContent = sub;
+  txt.querySelector('.desc').textContent = desc;
+  row.append(cardCanvas(it), txt);
+  el.append(bigCanvas(art), row);
+  return el;
+}
+
+function render() {
+  const P = document.getElementById('patches'), K = document.getElementById('perks');
+  P.innerHTML = ''; K.innerHTML = '';
+  for (const key of Object.keys(HANDS)) {
+    const it = makePatch(key, rarity);
+    P.appendChild(tile(it, HANDS[key].proto + ' PATCH', HANDS[key].name + ' // ' + PATCH_CODE[key], itemDesc(it, true)));
+  }
+  for (const id of PERK_IDS) {
+    const it = makePerk(id, rarity);
+    K.appendChild(tile(it, PERK_DEFS[id].name, RARITY.name[rarity] + ' // ' + PERK_DEFS[id].code, itemDesc(it, true)));
+  }
+}
+
+const bar = document.getElementById('rar');
+RARITY.name.forEach((n, r) => {
+  const b = document.createElement('button'); b.textContent = n; b.style.color = RARITY.col[r];
+  b.onclick = () => { rarity = r; [...bar.children].forEach((x, i) => x.classList.toggle('on', i === r)); render(); };
+  if (r === rarity) b.classList.add('on');
+  bar.appendChild(b);
+});
+render();
+</script>
+</body>
+</html>

@@ -17,10 +17,10 @@ const GREET = ['WELCOME BACK. NO REFUNDS.', 'FRESH EXPLOITS. BARELY USED.', 'CAS
 const BUY   = ['PLEASURE DOING BUSINESS.', 'GOOD CHOICE. PROBABLY.', 'THAT ONE BITES.', 'NO RECEIPTS.'];
 const BROKE = ['COME BACK WITH MORE CREDITS.', 'NICE TRY. CREDITS FIRST.', 'YOUR WALLET SAYS NO.'];
 const RARE  = ['OOH. THAT ONE IS SPICY.', 'WHERE DID YOU FIND THAT?', 'NOW WE ARE TALKING.'];
-const TICK  = '*** BLACK MARKET *** STATS STAY ENCRYPTED UNTIL YOU BUY *** PACKS: OPEN, DECRYPT, PICK *** REROLL FOR NEW SOFTWARE *** ';
+const TICK  = '*** BLACK MARKET *** *** PACKS: OPEN, DECRYPT, PICK *** REROLL FOR NEW SOFTWARE *** ';
 
 // ---------- state ----------
-let run = null, onDone = null, t = 0;
+let run = null, onDone = null, onSave = null, t = 0;
 let items = [], packs = [], rerollCost = 2;
 let hover = -1, prevHover = -1, hoverBtn = -1, prevHoverBtn = -1, btns = [];
 let quote = '', quoteT = 0, typed = 0;
@@ -31,14 +31,30 @@ let shakeSlot = -1, shakeT = 0, blinkT = 0, nextBlink = 2;
 
 const money = () => run.money;
 
-function enter(r, cb) {
-  run = r; onDone = cb; t = 0;
-  items = rollItems(2, ['perk', 'patch']);
-  packs = [rollPackType(), rollPackType()].map(type => ({ type, sold: false }));
-  rerollCost = 2;
+/** snap = a saved shop (from snapshot()) to restore instead of rolling fresh stock. */
+function enter(r, cb, saveCb, snap) {
+  run = r; onDone = cb; onSave = saveCb || null; t = 0;
   reveal = null; faceFor = null; pack = null;
+  if (snap) {
+    items = snap.items; packs = snap.packs; rerollCost = snap.rerollCost;
+    if (snap.pack) pack = { ...snap.pack, def: PACKS[snap.pack.type], t: 99, shown: snap.pack.items.length, flash: [] };
+    if (snap.faceFor) faceFor = run.perks.find(p => p.uid === snap.faceFor) || null;
+  } else {
+    items = rollItems(2, ['perk', 'patch']);
+    packs = [rollPackType(), rollPackType()].map(type => ({ type, sold: false }));
+    rerollCost = 2;
+  }
   say(G.pick(GREET));
+  save();
 }
+
+function snapshot() {
+  return {
+    items, packs, rerollCost, faceFor: faceFor ? faceFor.uid : 0,
+    pack: pack ? { type: pack.type, items: pack.items, picks: pack.picks, picked: pack.picked, closeT: -1 } : null,
+  };
+}
+function save() { if (onSave) onSave(snapshot()); }
 
 function say(s) { quote = s; quoteT = 0; typed = 0; SFX.talk(); }
 
@@ -66,6 +82,7 @@ function buy(i) {
     p.sold = true;
     SFX.buy();
     openPack(p.type);
+    save();
   }
 }
 
@@ -77,6 +94,7 @@ function reroll() {
   reveal = null;
   SFX.rollStart(); G.glitch(0.1);
   say('NEW STOCK. SAME PRICES.');
+  save();
 }
 
 function leave() { SFX.select(); onDone(); }
@@ -91,12 +109,14 @@ function finishReveal() {
   if (it.rarity >= 4) { G.flash(0.35); G.shake(3); }
   if (it.rarity === 5) G.glitch(0.5);
   if (it.kind === 'perk' && it.id === 'loaded' && it.stats.choose) faceFor = it;
+  save();
 }
 
 function chooseFace(f) {
   faceFor.stats.face = f;
   faceFor = null;
   SFX.select();
+  save();
 }
 
 // ------------------------------------------------------------
@@ -105,7 +125,7 @@ function chooseFace(f) {
 function openPack(type) {
   const def = PACKS[type];
   pack = {
-    def, items: rollItems(def.show, def.pool, def.boost), t: 0, shown: 0, flash: [],
+    type, def, items: rollItems(def.show, def.pool, def.boost), t: 0, shown: 0, flash: [],
     picks: def.pick, picked: [], closeT: -1,
   };
   reveal = null;
@@ -130,6 +150,7 @@ function closePack(skipped) {
   if (skipped && pack.picked.length === 0) { run.money += SKIP_REWARD; SFX.coin(); say('SUIT YOURSELF. HAVE $' + SKIP_REWARD + '.'); }
   pack = null;
   reveal = null;
+  save();
 }
 
 // ------------------------------------------------------------
@@ -276,7 +297,7 @@ function drawInfo() {
   if (reveal && (!reveal.done || (reveal.doneT < 3 && !hovered && !(hover >= 2 && !pack)))) {
     const it = reveal.item, col = RARITY.col[it.rarity];
     if (!reveal.done) {
-      UI.infoBox(IX, IY, IW, IH, itemName(it), col, 'DECRYPTING...', PAL.green, scrambled(itemDesc(it, false, run)), PAL.mint);
+      UI.infoBox(IX, IY, IW, IH, itemName(it), col, 'DECRYPTING...', PAL.green, scrambled(itemDesc(it, true, run)), PAL.mint);
     } else {
       let d = itemDesc(it, true);
       if (it.kind === 'patch') d = `${HANDS[it.key].name} IS NOW LEVEL ${run.levels[it.key]}.` + (it.other ? ` ${HANDS[it.other].name} DROPPED TO LEVEL ${run.levels[it.other]}.` : '');
@@ -288,7 +309,7 @@ function drawInfo() {
     const col = RARITY.col[hovered.rarity];
     const d = hovered.revealed
       ? (hovered.kind === 'patch' ? `INSTALLED. ${HANDS[hovered.key].name} IS LEVEL ${run.levels[hovered.key]}.` : itemDesc(hovered, true))
-      : itemDesc(hovered, false, run);
+      : itemDesc(hovered, true, run);
     UI.infoBox(IX, IY, IW, IH, itemName(hovered), col, hovered.revealed ? 'INSTALLED' : RARITY.name[hovered.rarity], hovered.revealed ? PAL.green : col, d, PAL.white);
     return;
   }
@@ -296,7 +317,7 @@ function drawInfo() {
     const def = PACKS[packs[hover - 2].type];
     const what = def.pool.length > 1 ? 'PERKS OR PATCHES' : def.pool[0] === 'perk' ? 'PERKS' : 'PATCHES';
     UI.infoBox(IX, IY, IW, IH, def.name, PAL.white, '$' + def.price, PAL.gold,
-      `OPEN IT TO SEE ${def.show} ${what}, THEN TAKE ${def.pick}.` + (def.mega ? ' BETTER ODDS OF RARE AND ABOVE.' : '') + ' STATS STAY ENCRYPTED UNTIL YOU PICK.', PAL.white);
+      `OPEN IT TO SEE ${def.show} ${what}, THEN TAKE ${def.pick}.` + (def.mega ? ' BETTER ODDS OF RARE AND ABOVE.' : ''), PAL.white);
     return;
   }
   if (pack) {
@@ -306,7 +327,7 @@ function drawInfo() {
   }
   const perks = run.perks.length;
   UI.infoBox(IX, IY, IW, IH, 'THE DEALER', PAL.green, perks + ' PERK' + (perks === 1 ? '' : 'S') + ' OWNED', '#8a7fc0',
-    'HOVER TO INSPECT. CLICK TO BUY. STATS STAY ENCRYPTED UNTIL YOU OWN IT.', '#a99be0');
+    'HOVER TO INSPECT. CLICK TO BUY.', '#a99be0');
 }
 
 function drawPack() {
