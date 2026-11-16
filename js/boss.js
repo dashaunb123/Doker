@@ -1,16 +1,18 @@
 // ============================================================
 //  DOKER — BOSS ACTORS. Boss firewalls (rounds 4 and 8) get a giant
-//  character that rises up behind the table and looms over it, watching.
-//  Its energy veins crawl across the room, and it leans in to enforce its
-//  rule in person (pounds a die to 1, beams padlocks onto 6s, sucks rolls out
-//  of the counter, slams a cage on the perks, bites the score).
-//  Sprites: BOSS_ART_DEFS (js/bossart.js). Rules: BOSSES (js/items.js).
-//  play.js drives it through the hooks returned at the bottom.
+//  character that is part of the table: its bust looms over the top edge of
+//  the felt (in front of your wildcards, behind your dice), its arms reach out
+//  and its hands grip the table's top corners. The hands do the dirty work:
+//  pound a die to 1, slap padlocks on 6s, stuff your rolls in its mouth, slam
+//  a cage on your perks, grab at your score. Its energy veins crawl across the
+//  room. It fades back when you look at your wildcards.
+//  Art: BOSS_LOOM_DEFS (js/bossloom.js: bust + hand + anchors), falling back to
+//  the full-body BOSS_ART_DEFS (js/bossart.js). Rules: BOSSES (js/items.js).
 // ============================================================
 const BOSS = (() => {
 'use strict';
 
-const BIG = 2.5;                   // how much bigger than the sprite the looming boss is drawn
+const LS = 2;                      // the bust and hands are drawn at 2x
 
 // ---------- personas ----------
 const PERSONA = {
@@ -56,54 +58,76 @@ const PERSONA = {
   },
 };
 
-// ---------- sprites (falls back to a placeholder until art exists) ----------
-const FRAMES = ['idle', 'blink', 'act', 'peek', 'hurt'];
-const spriteCache = {};
-function spritesFor(id) {
-  if (spriteCache[id]) return spriteCache[id];
-  const def = typeof BOSS_ART_DEFS !== 'undefined' && BOSS_ART_DEFS[id];
-  const out = {};
-  if (def) {
-    const pal = { ...ART_PAL, ...(def.pal || {}) };
-    for (const f of FRAMES) out[f] = makeSprite(def.frames[f] || def.frames.idle, pal);
+// ---------- art: bust frames, hand frames, anchors, arm colours ----------
+const BUST_FRAMES = ['idle', 'blink', 'act', 'peek', 'hurt'];
+const HAND_FRAMES = ['grip', 'open', 'fist', 'point'];
+const artCache = {};
+
+function shadeHex(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  return '#' + [n >> 16, (n >> 8) & 255, n & 255].map(v => Math.max(0, Math.min(255, Math.round(v * f))).toString(16).padStart(2, '0')).join('');
+}
+
+/** Fallback hand (until the boss has drawn hands): a chunky 4-finger claw in its colour. */
+function makeFallbackHand(col, f) {
+  const [c, g] = newCanvas(20, 18);
+  const px = (x, y, w, h, cc) => { g.fillStyle = cc; g.fillRect(x, y, w, h); };
+  const dark = shadeHex(col, 0.55), hi = shadeHex(col, 1.35);
+  const fingers = f === 'fist' ? [] : f === 'point' ? [[8, 9, 4, 8]] : f === 'open' ? [[1, 1, 3, 7], [6, 0, 3, 7], [11, 0, 3, 7], [16, 1, 3, 7]] : [[2, 9, 3, 8], [7, 10, 3, 8], [12, 10, 3, 8], [16, 9, 3, 7]];
+  const palm = f === 'open' ? [2, 7, 16, 9] : f === 'fist' ? [2, 4, 16, 12] : [2, 2, 16, 9];
+  for (const [x, y, w, h] of [palm, ...fingers]) px(x - 1, y - 1, w + 2, h + 2, PAL.ink);
+  for (const [x, y, w, h] of [palm, ...fingers]) { px(x, y, w, h, col); px(x, y, w, 1, hi); px(x, y + h - 1, w, 1, dark); }
+  if (f === 'fist') for (let k = 0; k < 4; k++) px(3 + k * 4, 6, 1, 4, dark);
+  return c;
+}
+
+function artFor(id) {
+  if (artCache[id]) return artCache[id];
+  const P0 = PERSONA[id];
+  const loom = typeof BOSS_LOOM_DEFS !== 'undefined' && BOSS_LOOM_DEFS[id];
+  const full = typeof BOSS_ART_DEFS !== 'undefined' && BOSS_ART_DEFS[id];
+  const out = { bust: {}, hand: {} };
+  if (loom) {
+    const pal = { ...ART_PAL, ...(loom.pal || {}) };
+    for (const f of BUST_FRAMES) out.bust[f] = makeSprite(loom.bust[f] || loom.bust.idle, pal);
+    for (const f of HAND_FRAMES) out.hand[f] = makeSprite(loom.hand[f] || loom.hand.grip, pal);
+    out.shoulders = loom.shoulders; out.wrist = loom.wrist; out.arm = loom.arm;
   } else {
-    const col = PERSONA[id].col;
-    for (const f of FRAMES) {
-      const [c, g] = newCanvas(36, 36);
-      g.fillStyle = PAL.ink; g.fillRect(2, 4, 32, 32);
-      g.fillStyle = col; g.fillRect(3, 5, 30, 30);
-      g.fillStyle = PAL.ink;
-      if (f !== 'blink') { g.fillRect(10, 13, 5, 5); g.fillRect(21, 13, 5, 5); } else { g.fillRect(10, 16, 5, 1); g.fillRect(21, 16, 5, 1); }
-      if (f === 'act') g.fillRect(12, 24, 12, 6);
-      out[f] = c;
+    // stand-in: the full-body sprite as the bust, a drawn claw as the hands
+    for (const f of BUST_FRAMES) {
+      if (full) out.bust[f] = makeSprite(full.frames[f] || full.frames.idle, { ...ART_PAL, ...(full.pal || {}) });
+      else { const [c, g] = newCanvas(36, 36); g.fillStyle = P0.col; g.fillRect(2, 2, 32, 32); out.bust[f] = c; }
     }
+    for (const f of HAND_FRAMES) out.hand[f] = makeFallbackHand(shadeHex(P0.col, 0.8), f);
+    const w = out.bust.idle.width, h = out.bust.idle.height;
+    out.shoulders = [[Math.round(w * 0.18), Math.round(h * 0.42)], [Math.round(w * 0.82), Math.round(h * 0.42)]];
+    out.wrist = [10, 2];
+    out.arm = { main: shadeHex(P0.col, 0.55), dark: shadeHex(P0.col, 0.32), hi: shadeHex(P0.col, 0.9) };
   }
-  return (spriteCache[id] = out);
+  out.arm = { main: out.arm.main, dark: out.arm.dark || shadeHex(out.arm.main, 0.6), hi: out.arm.hi || shadeHex(out.arm.main, 1.4) };
+  return (artCache[id] = out);
 }
 
 // ---------- state ----------
-let id = null, run = null, P = null, S = null, hk = null;
-let x = 0, y = 0, home = { x: 0, y: 0 }, frame = 'idle', scale = BIG, lookX = 0;
+let id = null, run = null, P = null, A = null, hk = null;
+let body = { ox: 0, oy: 0, frame: 'idle' };       // bust offset from its home + current frame
+let bodyHome = { x: 0, y: 0 };                    // top-left of the bust at rest
+let hands = [];                                   // [{ x, y (centre), frame, home:{x,y} }] 0 = left (mirrored), 1 = right
 let tasks = [], busy = false;
-let speech = null;                 // { text, t, life }
-let cut = null;                    // intro cutscene { t, done }
-let dead = 0;                      // >0 while the defeat animation plays
-let caged = false, cageT = 0;      // SANDBOX cage over the perk strip
-let locks = new Map();             // ENCRYPTION padlocks: die index -> pop timer
-let freezeT = 0;                   // LAG: dice frozen mid-air
-let held = 0;                      // LAG: rolls still on show before it eats them (intro)
-let veins = [];                    // glowing energy cracks crawling out from the boss
-let beams = [];                    // { x1, y1, x2, y2, life, col }
-let motes = [];                    // particles sucked toward / flung from the boss
-let rings = [];                    // shockwaves { x, y, r, life }
-let blinkT = 0, nextBlink = 2, bob = 0, presence = 0;
+let speech = null, cut = null, dead = 0;
+let caged = false, cageT = 0, locks = new Map(), freezeT = 0, held = 0;
+let veins = [], beams = [], motes = [], rings = [];
+let blinkT = 0, nextBlink = 2, bob = 0, presence = 0, fade = 1, lookX = 0;
 
 const pick = a => a[Math.floor(Math.random() * a.length)];
 const lerp = (a, b, p) => a + (b - a) * p;
 const ease = p => (p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2);
-const img = () => S[frame] || S.idle;
-const topY = () => y - img().height * scale;           // top of the drawn sprite
-const mouthY = () => y - img().height * scale * 0.45;  // roughly the face/hands
+const bustImg = () => A.bust[body.frame] || A.bust.idle;
+const bustW = () => A.bust.idle.width * LS, bustH = () => A.bust.idle.height * LS;
+const bustX = () => Math.round(bodyHome.x + body.ox + lookX), bustY = () => Math.round(bodyHome.y + body.oy + breathe());
+const mouth = () => ({ x: bustX() + bustW() / 2, y: bustY() + bustH() * 0.62 });
+const breathe = () => (!cut && !dead && (body.frame === 'idle' || body.frame === 'blink') ? Math.sin(bob * 1.8) * 1.5 : 0);
+const handSize = () => ({ w: A.hand.grip.width * LS, h: A.hand.grip.height * LS });
 
 /** hooks from play.js: { TX, TY, TW, TH, dieX(i), dieTop, face(i), setFace(i,f), float(x,y,txt,col,big),
  *  spark(x,y), rollsBox:{x,y}, perkBox:{x,y,w,h}, encrypted(i), resultY } */
@@ -112,11 +136,19 @@ function setup(r, hooks) {
   id = r.boss || null;
   tasks = []; busy = false; speech = null; cut = null; dead = 0;
   caged = false; cageT = 0; locks = new Map(); freezeT = 0; held = 0;
-  beams = []; motes = []; rings = []; presence = 0;
+  beams = []; motes = []; rings = []; presence = 0; fade = 1;
   if (!id) return;
-  P = PERSONA[id]; S = spritesFor(id);
-  home = { x: hk.TX + hk.TW / 2, y: hk.TY - 8 + S.idle.height * BIG };
-  x = home.x; y = home.y; frame = 'idle'; scale = BIG;
+  P = PERSONA[id]; A = artFor(id);
+  bodyHome = { x: hk.TX + hk.TW / 2 - bustW() / 2, y: hk.TY - 12 };   // its hood/head pokes up past the top bar
+  body = { ox: 0, oy: 0, frame: 'idle' };
+  const { w, h } = handSize();
+  // hands grip the top corners of the table, fingers curled over the rail
+  const hy = hk.TY - 15 + h / 2;          // knuckles land on the rail; the wrists reach up over the top bar
+  hands = [
+    { x: hk.TX + 12, y: hy, frame: 'grip' },
+    { x: hk.TX + hk.TW - 12, y: hy, frame: 'grip' },
+  ];
+  hands.forEach(hd => (hd.home = { x: hd.x, y: hd.y }));
   makeVeins();
 }
 const active = () => !!id && !dead;
@@ -124,20 +156,18 @@ const active = () => !!id && !dead;
 /** Lightning-like cracks from behind the boss out to the edges of the screen. */
 function makeVeins() {
   veins = [];
-  const cx = home.x, cy = hk.TY + 40;
+  const cx = hk.TX + hk.TW / 2, cy = hk.TY + 30;
   for (let k = 0; k < 11; k++) {
     const ang = Math.PI + (k / 10) * Math.PI + G.rand(-0.15, 0.15) + (k > 5 ? 0.25 : -0.25) * (k % 2);
     const pts = [[cx + Math.cos(ang) * 30, cy + Math.sin(ang) * 18]];
     let px = pts[0][0], py = pts[0][1], dir = ang;
     const len = G.rand(16, 26);
     for (let s = 0; s < len; s++) {
-      dir += G.rand(-0.55, 0.55);
-      dir = lerp(dir, ang, 0.35);
+      dir += G.rand(-0.55, 0.55); dir = lerp(dir, ang, 0.35);
       px += Math.cos(dir) * G.rand(6, 11); py += Math.sin(dir) * G.rand(5, 9);
       pts.push([px, py]);
       if (px < -10 || px > G.W + 10 || py < -10 || py > G.H + 10) break;
     }
-    // ...and two that crawl down the sides of the table
     const branches = [];
     for (let b = 0; b < 2; b++) {
       const at = pts[Math.floor(G.rand(2, pts.length - 1))];
@@ -149,6 +179,7 @@ function makeVeins() {
     }
     veins.push({ pts, branches, ph: Math.random() * 6 });
   }
+  // two that crawl down the sides of the table
   for (const side of [-1, 1]) {
     let px = cx + side * 60, py = cy, dir = side < 0 ? Math.PI * 0.75 : Math.PI * 0.25;
     const pts = [[px, py]];
@@ -159,64 +190,91 @@ function makeVeins() {
 
 // ---------- task queue (sequential little animations) ----------
 function task(dur, tick, end) { tasks.push({ dur, t: 0, tick, end }); }
-function wait(dur, f) { task(dur, () => { if (f) frame = f; }); }
+function wait(dur, f) { task(dur, () => { if (f) body.frame = f; }); }
 function call(fn) { task(0, null, fn); }
-/** Lean the looming body toward a point (clamped: it stays behind the table). */
-function lean(tx, dy, dur, f = 'idle', sc = BIG) {
-  let sx, sy, ss;
-  const ex = home.x + G.clamp(tx - home.x, -95, 95), ey = home.y + dy;
-  task(dur, p => {
-    if (sx === undefined) { sx = x; sy = y; ss = scale; }
-    const e = ease(p);
-    x = lerp(sx, ex, e); y = lerp(sy, ey, e); scale = lerp(ss, sc, e);
-    frame = f;
-  }, () => { x = ex; y = ey; scale = sc; });
+/** Move the bust (offset from home) and set its frame. */
+function lean(ox, oy, dur, f = 'idle') {
+  let sx, sy;
+  task(dur, p => { if (sx === undefined) { sx = body.ox; sy = body.oy; } const e = ease(p); body.ox = lerp(sx, ox, e); body.oy = lerp(sy, oy, e); body.frame = f; },
+    () => { body.ox = ox; body.oy = oy; });
 }
-function settle(dur = 0.35) { lean(home.x, 0, dur, 'idle', BIG); call(() => { frame = 'idle'; }); }
+/** Move a hand (centre) with a little arc; f = hand frame, bf = bust frame while it moves. */
+function reach(i, tx, ty, dur, f, bf, hop = 10) {
+  let sx, sy;
+  const hd = () => hands[i];
+  task(dur, p => {
+    const h = hd();
+    if (sx === undefined) { sx = h.x; sy = h.y; }
+    const e = ease(p);
+    h.x = lerp(sx, tx, e); h.y = lerp(sy, ty, e) - Math.sin(p * Math.PI) * hop; h.frame = f;
+    if (bf) body.frame = bf;
+  }, () => { hd().x = tx; hd().y = ty; });
+}
+/** Two hands at once. */
+function reach2(t0, t1, dur, f, bf) {
+  let s;
+  task(dur, p => {
+    if (!s) s = hands.map(h => ({ x: h.x, y: h.y }));
+    const e = ease(p);
+    [t0, t1].forEach((t, i) => { hands[i].x = lerp(s[i].x, t[0], e); hands[i].y = lerp(s[i].y, t[1], e); hands[i].frame = f; });
+    if (bf) body.frame = bf;
+  });
+}
+function handHome(i, dur = 0.35) { reach(i, hands[i].home.x, hands[i].home.y, dur, 'open', null, 12); call(() => (hands[i].frame = 'grip')); }
+function settle(dur = 0.35) {
+  lean(0, 0, dur, 'idle');
+  call(() => { body.frame = 'idle'; });
+}
+const nearest = x => (x < hk.TX + hk.TW / 2 ? 0 : 1);
 function say(text, life = 1.8) { speech = { text, t: 0, life }; SFX.talk(); }
-function beam(x2, y2, col, life = 0.35) { beams.push({ x1: x, y1: mouthY(), x2, y2, life, max: life, col: col || P.col }); }
-function suck(fx, fy, n, col) { for (let k = 0; k < n; k++) motes.push({ x: fx + G.rand(-8, 8), y: fy + G.rand(-4, 4), tx: () => x, ty: () => mouthY(), t: -k * 0.03, col: col || P.col }); }
+function beam(x1, y1, x2, y2, col, life = 0.3) { beams.push({ x1, y1, x2, y2, life, max: life, col: col || P.col }); }
 
-// ---------- intro cutscene: it rises out of the dark behind the table ----------
-const CUT_LEN = 3.8;
+// ---------- intro cutscene: it rises out of the dark and grabs the table ----------
+const CUT_LEN = 3.9;
 function intro(done) {
   if (!id) return done();
-  cut = { t: 0, done, risen: false, said: false };
+  cut = { t: 0, done, risen: false, grabbed: false, said: false };
   if (id === 'lag') held = Math.max(0, Math.min(RULES.ROLLS, run.rollsLeft + 3) - run.rollsLeft);
-  x = home.x; y = home.y + 140; scale = BIG; frame = 'blink'; presence = 0;
+  body.oy = 150; body.frame = 'blink'; presence = 0;
+  hands.forEach(h => { h.x = h.home.x + (h.home.x < hk.TX + 50 ? -30 : 30); h.y = -40; h.frame = 'open'; });
   SFX.fail(); G.glitch(0.6);
 }
 function endCut() {
   if (!cut) return;
   const done = cut.done;
-  cut = null; x = home.x; y = home.y; scale = BIG; frame = 'idle'; presence = 1;
+  cut = null; body.ox = 0; body.oy = 0; body.frame = 'idle'; presence = 1;
+  hands.forEach(h => { h.x = h.home.x; h.y = h.home.y; h.frame = 'grip'; });
   // rule set-pieces right after the intro
   if (id === 'lag') {
     busy = true;
-    lean(hk.rollsBox.x, 10, 0.5, 'peek');
+    const rx = hk.rollsBox.x + 50, ry = hk.rollsBox.y + 16;
     for (let k = 0; k < 3; k++) {
+      reach(0, rx, ry, 0.35, 'open', 'peek', 14);                       // reach into the roll counter...
+      call(() => { held = Math.max(0, held - 1); SFX.slam(k); G.shake(2); hk.float(rx + 24, ry - 20, '-1 ROLL', PAL.red); });
+      reach(0, rx, ry - 2, 0.06, 'fist', 'peek', 0);                     // ...grab one...
+      const m = mouth();
+      reach(0, m.x - 6, m.y + 4, 0.32, 'fist', 'act', 18);               // ...and stuff it in its mouth
+      call(() => { SFX.slam(3); G.shake(1.5); for (let q = 0; q < 6; q++) hk.spark(m.x + G.rand(-8, 8), m.y + G.rand(-4, 4)); });
       wait(0.12, 'act');
-      call(() => {
-        held = Math.max(0, held - 1); SFX.slam(k); G.shake(2);
-        suck(hk.rollsBox.x + 40, hk.rollsBox.y + 18, 8, PAL.green);
-        hk.float(hk.rollsBox.x + 70, hk.rollsBox.y - 4, '-1 ROLL', PAL.red);
-      });
-      wait(0.3, 'peek');
     }
     call(() => { held = 0; say('MMM... CRUNCHY.'); });
-    settle(0.5);
+    handHome(0, 0.4);
+    settle(0.3);
     call(() => { busy = false; done(); });
   } else if (id === 'sandbox') {
     busy = true;
-    wait(0.25, 'act');
-    lean(hk.perkBox.x + hk.perkBox.w / 2, 18, 0.12, 'act', BIG * 1.05);
+    const b = hk.perkBox, cx = b.x + b.w / 2;
+    lean(0, -4, 0.2, 'act');
+    reach(1, cx, b.y - 34, 0.4, 'fist', 'act', 16);
+    reach(1, cx, b.y - 6, 0.07, 'fist', 'act', 0);
     call(() => {
       caged = true; cageT = 0; SFX.slam(2); G.shake(5);
-      rings.push({ x: hk.perkBox.x + hk.perkBox.w / 2, y: hk.perkBox.y + 5, r: 6, life: 1 });
-      hk.float(hk.perkBox.x + hk.perkBox.w / 2, hk.perkBox.y - 10, 'PERKS LOCKED UP', PAL.red, true);
+      rings.push({ x: cx, y: b.y + 5, r: 6, life: 1 });
+      hk.float(cx, b.y - 12, 'PERKS LOCKED UP', PAL.red, true);
     });
-    wait(0.45, 'act');
-    settle(0.45);
+    wait(0.4, 'act');
+    handHome(1, 0.4);
+    settle(0.3);
     call(() => { busy = false; done(); });
   } else done();
 }
@@ -232,52 +290,60 @@ function beforeRoll() {
   if (id === 'lag' && Math.random() < 0.4) {
     freezeT = 0.9;
     say(pick(P.act), 1.0);
-    task(0.9, () => { frame = 'act'; }, () => { frame = 'idle'; });
+    reach2([hands[0].home.x + 20, hands[0].home.y + 30], [hands[1].home.x - 20, hands[1].home.y + 30], 0.2, 'open', 'act');
+    wait(0.6, 'act');
+    reach2([hands[0].home.x, hands[0].home.y], [hands[1].home.x, hands[1].home.y], 0.2, 'grip', 'idle');
     return 0.9;
   }
   return 0;
 }
 
-/** After all dice land, before scoring. DDOS pounds its die, CIPHER beams padlocks onto 6s. */
+/** After all dice land, before scoring. DDOS pounds its die, CIPHER slaps padlocks onto 6s. */
 function afterLand(done) {
   if (!active()) return done();
   busy = true;
   if (id === 'ddos') {
-    const i = run.ddosDie, tx = hk.dieX(i);
+    const i = run.ddosDie, tx = hk.dieX(i), top = hk.dieTop, hi = nearest(tx);
     if (hk.face(i) !== 1) {
-      lean(tx, -10, 0.3, 'act');                       // rear up...
-      wait(0.12, 'act');
-      lean(tx, 26, 0.07, 'peek', BIG * 1.08);           // ...and POUND the table
+      reach(hi, tx, top - 22, 0.32, 'fist', 'act', 14);               // fist hovers over the die...
+      wait(0.1, 'act');
+      reach(hi, tx, top + 12, 0.06, 'fist', 'act', 0);                // ...SLAM
       call(() => {
         hk.setFace(i, 1); SFX.slam(4); G.shake(6); G.glitch(0.15);
-        rings.push({ x: tx, y: hk.dieTop + 20, r: 8, life: 1 });
-        beam(tx, hk.dieTop + 20, P.col, 0.25);
-        hk.float(tx, hk.dieTop + 52, 'ACCESS DENIED', PAL.red, true);
+        rings.push({ x: tx, y: top + 20, r: 8, life: 1 });
+        hk.float(tx, top + 52, 'ACCESS DENIED', PAL.red, true);
         say(pick(P.act), 1.2);
       });
-      wait(0.3, 'peek');
+      wait(0.28, 'act');
+      handHome(hi, 0.35);
     } else {
-      lean(tx, 22, 0.45, 'peek', BIG * 1.06);           // lean right down for a look
+      const ox = G.clamp((tx - (hk.TX + hk.TW / 2)) * 0.3, -30, 30);
+      lean(ox, 14, 0.4, 'peek');                                       // leans right down for a peep
+      reach(hi, tx + (hi ? 26 : -26), top - 8, 0.4, 'grip', 'peek', 6); // and rests a hand beside it
       call(() => say(pick(P.peek), 1.3));
       wait(0.9, 'peek');
+      handHome(hi, 0.35);
     }
-    settle(0.4);
+    settle(0.3);
   } else if (id === 'encryption') {
     const six = [0, 1, 2, 3, 4].filter(i => hk.encrypted(i));
     if (!six.length) {
-      if (Math.random() < 0.5) { lean(home.x, 10, 0.25, 'peek'); call(() => say(pick(P.peek), 1.1)); wait(0.4, 'peek'); settle(0.3); }
+      if (Math.random() < 0.5) { lean(0, 8, 0.25, 'peek'); call(() => say(pick(P.peek), 1.1)); wait(0.5, 'peek'); settle(0.3); }
     } else {
-      lean(home.x, 6, 0.2, 'act');
       for (const i of six) {
+        const tx = hk.dieX(i), hi = nearest(tx), top = hk.dieTop;
+        reach(hi, tx, top - 18, 0.26, 'point', 'act', 12);
+        reach(hi, tx, top + 8, 0.06, 'fist', 'act', 0);
         call(() => {
-          beam(hk.dieX(i), hk.dieTop + 20, PAL.cyan, 0.3);
           locks.set(i, 1); SFX.decrypt(); G.glitch(0.08);
-          hk.float(hk.dieX(i), hk.dieTop + 52, 'ENCRYPTED', PAL.cyan);
+          rings.push({ x: tx, y: top + 22, r: 5, life: 0.8 });
+          hk.float(tx, top + 52, 'ENCRYPTED', PAL.cyan);
         });
-        wait(0.24, 'act');
+        wait(0.14, 'act');
+        handHome(hi, 0.28);
       }
       call(() => say(pick(P.act), 1.1));
-      settle(0.4);
+      settle(0.3);
     }
   }
   call(() => { busy = false; done(); });
@@ -287,39 +353,59 @@ function afterLand(done) {
 function onScore(key) {
   if (!active()) return;
   if (id === 'sandbox' && run.perks.length) {
-    lean(hk.perkBox.x + hk.perkBox.w / 2, 10, 0.12, 'act');
-    call(() => { cageT = 0.4; SFX.slam(1); G.shake(1.5); });
-    wait(0.25, 'act');
+    const b = hk.perkBox, cx = b.x + b.w * 0.75;
+    reach(1, cx, b.y - 10, 0.18, 'grip', 'act', 8);
+    for (let k = 0; k < 3; k++) { reach(1, cx + (k % 2 ? 3 : -3), b.y - 8, 0.06, 'grip', 'act', 0); call(() => { cageT = 0.6; SFX.slam(1); G.shake(1); }); }
     call(() => { if (Math.random() < 0.5) say(pick(P.act), 1.0); });
-    settle(0.3);
+    handHome(1, 0.3);
+    settle(0.2);
   }
   if (id === 'honeypot' && key !== 'pair' && key !== 'bust' && Math.random() < 0.3) say(pick(P.peek), 1.1);
 }
 
-/** HONEYPOT: lunge at the score when a pair lands. */
+/** HONEYPOT: it lunges and grabs at the score when a pair lands. */
 function bite() {
   if (!active() || id !== 'honeypot') return;
-  lean(home.x, 30, 0.16, 'act', BIG * 1.12);
+  const cx = hk.TX + hk.TW / 2, cy = hk.resultY + 18;
+  lean(0, 18, 0.14, 'act');
+  reach2([cx - 34, cy], [cx + 34, cy], 0.16, 'open', 'act');
+  reach2([cx - 18, cy + 4], [cx + 18, cy + 4], 0.06, 'fist', 'act');
   call(() => {
     SFX.slam(3); G.shake(4); say(pick(P.act), 1.1);
-    for (let k = 0; k < 14; k++) motes.push({ x: x + G.rand(-20, 20), y: mouthY() + G.rand(-6, 6), vx: G.rand(-90, 90), vy: G.rand(-120, 20), t: 0, col: G.pick(['#feae34', '#fee761', '#f77622']) });
+    for (let k = 0; k < 14; k++) motes.push({ x: cx + G.rand(-20, 20), y: cy + G.rand(-6, 6), vx: G.rand(-90, 90), vy: G.rand(-140, 0), t: 0, col: G.pick(['#feae34', '#fee761', '#f77622']) });
   });
-  wait(0.4, 'act');
-  settle(0.4);
+  wait(0.35, 'act');
+  reach2([hands[0].home.x, hands[0].home.y], [hands[1].home.x, hands[1].home.y], 0.35, 'grip', 'idle');
+  settle(0.25);
 }
 
-/** Flavour after a roll scores. */
+/** Flavour after a roll scores: laughs and slaps the table on a bust, flinches at big hands. */
 function react(key) {
   if (!active() || busy || tasks.length) return;
   const tier = HANDS[key].tier;
-  if (key === 'bust' && Math.random() < 0.45) { say(pick(P.bust), 1.3); wait(0.5, 'act'); call(() => (frame = 'idle')); }
-  else if (tier >= 4) { say(pick(P.big), 1.4); lean(home.x, -6, 0.15, 'peek'); wait(0.5, 'peek'); settle(0.3); }
+  if (key === 'bust' && Math.random() < 0.5) {
+    say(pick(P.bust), 1.3);
+    for (let k = 0; k < 2; k++) {
+      reach2([hands[0].home.x, hands[0].home.y - 8], [hands[1].home.x, hands[1].home.y - 8], 0.1, 'fist', 'act');
+      reach2([hands[0].home.x, hands[0].home.y + 4], [hands[1].home.x, hands[1].home.y + 4], 0.06, 'fist', 'act');
+      call(() => { SFX.slam(0); G.shake(2); });
+    }
+    reach2([hands[0].home.x, hands[0].home.y], [hands[1].home.x, hands[1].home.y], 0.15, 'grip', 'idle');
+  } else if (tier >= 4) {
+    say(pick(P.big), 1.4);
+    lean(0, -8, 0.15, 'peek');
+    reach2([hands[0].home.x - 6, hands[0].home.y - 10], [hands[1].home.x + 6, hands[1].home.y - 10], 0.15, 'open', 'peek');
+    wait(0.5, 'peek');
+    reach2([hands[0].home.x, hands[0].home.y], [hands[1].home.x, hands[1].home.y], 0.25, 'grip', 'idle');
+    settle(0.2);
+  }
 }
 
 function defeat() {
   if (!id || dead) return;
   tasks = []; cut = null; busy = false;
-  dead = 0.001; frame = 'hurt';
+  dead = 0.001; body.frame = 'hurt';
+  hands.forEach(h => (h.frame = 'open'));
   say(P.defeat, 1.6);
   SFX.glitch(); G.glitch(0.5);
   MUSIC.play('table');
@@ -328,7 +414,12 @@ function gloat() {
   if (!active()) return;
   tasks = [];
   say(P.gloat, 2.4);
-  lean(home.x, 12, 0.4, 'act', BIG * 1.1);
+  lean(0, 10, 0.3, 'act');
+  for (let k = 0; k < 3; k++) {
+    reach2([hands[0].home.x, hands[0].home.y - 8], [hands[1].home.x, hands[1].home.y - 8], 0.1, 'fist', 'act');
+    reach2([hands[0].home.x, hands[0].home.y + 4], [hands[1].home.x, hands[1].home.y + 4], 0.06, 'fist', 'act');
+    call(() => { SFX.slam(1); G.shake(2); });
+  }
 }
 
 // ---------- update ----------
@@ -343,21 +434,23 @@ function update(dt) {
   beams = beams.filter(b => b.life > 0);
   for (const r of rings) { r.r += 90 * dt; r.life -= dt * 2.2; }
   rings = rings.filter(r => r.life > 0);
-  for (const m of motes) {
-    m.t += dt;
-    if (m.t < 0) continue;
-    if (m.tx) { const tx = m.tx(), ty = m.ty(); m.x += (tx - m.x) * Math.min(1, dt * 7); m.y += (ty - m.y) * Math.min(1, dt * 7); if (Math.abs(tx - m.x) + Math.abs(ty - m.y) < 4) m.dead = true; }
-    else { m.vy += 300 * dt; m.x += m.vx * dt; m.y += m.vy * dt; if (m.t > 0.9) m.dead = true; }
-  }
+  for (const m of motes) { m.t += dt; m.vy += 300 * dt; m.x += m.vx * dt; m.y += m.vy * dt; if (m.t > 0.9) m.dead = true; }
   motes = motes.filter(m => !m.dead);
-  // it watches you: the body drifts a little toward the cursor
-  const mx = G.mouse.inside ? G.mouse.x : home.x;
-  lookX += (G.clamp((mx - home.x) / 30, -4, 4) - lookX) * Math.min(1, dt * 3);
+
+  // it watches you: the bust drifts toward the cursor
+  const m = G.mouse;
+  const mx = m.inside ? m.x : hk.TX + hk.TW / 2;
+  lookX += (G.clamp((mx - (hk.TX + hk.TW / 2)) / 30, -4, 4) - lookX) * Math.min(1, dt * 3);
+  // ...and steps back when you look at your wildcards (top band of the felt)
+  const wantFade = !cut && m.inside && m.x >= hk.TX && m.x < hk.TX + hk.TW && m.y >= hk.TY && m.y < hk.TY + 34 ? 0.22 : 1;
+  fade += (wantFade - fade) * Math.min(1, dt * 8);
 
   if (dead) {
     dead += dt;
     presence = Math.max(0, 1 - dead / 1.6);
-    if (Math.random() < 0.6) hk.spark(x + G.rand(-40, 40), topY() + G.rand(10, img().height * scale));
+    body.oy += dt * 30;
+    hands.forEach(h => { h.y -= dt * 40; h.x += (h.x < hk.TX + hk.TW / 2 ? -1 : 1) * dt * 30; });
+    if (Math.random() < 0.6) hk.spark(bustX() + G.rand(0, bustW()), bustY() + G.rand(0, bustH()));
     if (dead > 1.6) { id = null; caged = false; locks.clear(); }
     return;
   }
@@ -365,16 +458,23 @@ function update(dt) {
   if (cut) {
     cut.t += dt;
     const t = cut.t;
-    // eyes in the dark (blink frame), then it rises behind the table with a roar
-    if (t < 0.7) { y = home.y + 140; frame = 'blink'; presence = t / 0.7 * 0.3; }
+    // eyes in the dark, it rises behind the table, then slams both hands onto the corners
+    if (t < 0.7) { body.oy = 150; body.frame = 'blink'; presence = t / 0.7 * 0.3; }
     else if (t < 1.5) {
       const p = (t - 0.7) / 0.8;
-      y = lerp(home.y + 140, home.y, ease(p)); presence = 0.3 + 0.7 * p; frame = 'idle';
+      body.oy = lerp(150, 0, ease(p)); presence = 0.3 + 0.7 * p; body.frame = 'idle';
       if (Math.random() < 0.3) G.shake(1.5);
     } else {
-      if (!cut.risen) { cut.risen = true; y = home.y; frame = 'act'; SFX.slam(4); G.shake(7); G.flash(0.3); for (let k = 0; k < 18; k++) hk.spark(home.x + G.rand(-70, 70), hk.TY + G.rand(0, 20)); }
-      if (t > 1.9 && frame === 'act') frame = 'idle';
-      if (t > 1.7 && !cut.said) { cut.said = true; say(P.intro, 2.0); }
+      body.oy = 0;
+      if (!cut.risen) { cut.risen = true; body.frame = 'act'; SFX.slam(3); G.shake(4); }
+      const p = Math.min(1, (t - 1.5) / 0.3);
+      hands.forEach(h => { const sx = h.home.x + (h.home.x < hk.TX + 50 ? -30 : 30); h.x = lerp(sx, h.home.x, ease(p)); h.y = lerp(-40, h.home.y, p * p); h.frame = p < 1 ? 'open' : 'grip'; });
+      if (p >= 1 && !cut.grabbed) {
+        cut.grabbed = true; SFX.slam(4); G.shake(7); G.flash(0.3);
+        hands.forEach(h => { for (let k = 0; k < 8; k++) hk.spark(h.x + G.rand(-14, 14), h.y + G.rand(0, 14)); });
+      }
+      if (t > 2.1 && body.frame === 'act') body.frame = 'idle';
+      if (t > 1.9 && !cut.said) { cut.said = true; say(P.intro, 2.0); }
     }
     if (t >= CUT_LEN) endCut();
     return;
@@ -395,31 +495,70 @@ function update(dt) {
   }
   if (!tasks.length && !busy) {
     if ((nextBlink -= dt) <= 0) { blinkT = 0.14; nextBlink = G.rand(1.6, 3.6); }
-    if (blinkT > 0) { blinkT -= dt; if (frame === 'idle' || frame === 'blink') frame = blinkT > 0 ? 'blink' : 'idle'; }
+    if (blinkT > 0) { blinkT -= dt; if (body.frame === 'idle' || body.frame === 'blink') body.frame = blinkT > 0 ? 'blink' : 'idle'; }
+    // idle hands flex their fingers on the rail now and then
+    hands.forEach(h => {
+      if (h.flexT > 0) { h.flexT -= dt; if (h.flexT <= 0) h.frame = 'grip'; }
+      else if (h.frame === 'grip' && Math.random() < dt * 0.25) { h.frame = 'open'; h.flexT = 0.16; }
+    });
   }
 }
 
-// ---------- draw ----------
+// ---------- draw helpers ----------
+function plot(x, y, w, col) { G.rect(Math.round(x - w / 2), Math.round(y - w / 2), w, w, col); }
 function strokeVein(pts, col, w, alpha) {
-  const { ctx } = G;
-  ctx.globalAlpha = alpha;
+  G.ctx.globalAlpha = alpha;
   for (let i = 1; i < pts.length; i++) {
     const [ax, ay] = pts[i - 1], [bx, by] = pts[i];
     const n = Math.max(1, Math.ceil(Math.max(Math.abs(bx - ax), Math.abs(by - ay))));
     for (let s = 0; s <= n; s++) G.rect(Math.round(lerp(ax, bx, s / n)), Math.round(lerp(ay, by, s / n)), w, w, col);
   }
 }
+/** Wrist position (where the arm meets hand i). */
+function wrist(i) {
+  const h = hands[i], { w, h: hh } = handSize();
+  const left = h.x - w / 2, top = h.y - hh / 2;
+  const wx = i === 0 ? left + (A.hand.grip.width - A.wrist[0]) * LS : left + A.wrist[0] * LS;
+  return { x: wx, y: top + A.wrist[1] * LS };
+}
+/** A thick shaded arm from the shoulder, arcing up and over, down to the wrist. */
+function drawArm(i, alpha) {
+  const sh = A.shoulders[i];
+  const x1 = bustX() + sh[0] * LS, y1 = bustY() + sh[1] * LS;
+  const { x: x2, y: y2 } = wrist(i);
+  const cx = (x1 + x2) / 2 + (x2 - x1) * 0.1, cy = Math.min(y1, y2) - 16;
+  const pts = [];
+  for (let k = 0; k <= 48; k++) { const p = k / 48; pts.push([(1 - p) * (1 - p) * x1 + 2 * (1 - p) * p * cx + p * p * x2, (1 - p) * (1 - p) * y1 + 2 * (1 - p) * p * cy + p * p * y2]); }
+  G.ctx.globalAlpha = alpha;
+  for (const [x, y] of pts) plot(x, y, 10, PAL.ink);
+  for (const [x, y] of pts) plot(x, y, 8, A.arm.dark);
+  for (const [x, y] of pts) plot(x, y - 1, 5, A.arm.main);
+  for (const [x, y] of pts) plot(x - 1, y - 2, 2, A.arm.hi);
+  // elbow / joint knob
+  const [ex, ey] = pts[24];
+  plot(ex, ey, 12, PAL.ink); plot(ex, ey, 10, A.arm.dark); plot(ex - 1, ey - 1, 6, A.arm.main);
+  G.ctx.globalAlpha = 1;
+}
+function drawHand(i, alpha) {
+  const h = hands[i], im = A.hand[h.frame] || A.hand.grip;
+  const { w, h: hh } = handSize();
+  const { ctx } = G;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const x = Math.round(h.x - w / 2), y = Math.round(h.y - hh / 2);
+  if (i === 0) { ctx.translate(x + w, y); ctx.scale(-1, 1); ctx.drawImage(im, 0, 0, w, hh); }
+  else ctx.drawImage(im, x, y, w, hh);
+  ctx.restore();
+}
 
-/** Behind everything on the table: the lair tint, the energy veins (whole screen), the looming body.
- *  Call right after the felt is drawn. */
+// ---------- draw (layers called by play.js) ----------
+/** 1. Right after the felt: the lair tint and the energy veins crawling over the room. */
 function drawBack() {
   if (!id) return;
   const { ctx, T, W, H } = G;
   const pr = presence;
-  // darken the felt into its lair
   ctx.globalAlpha = 0.42 * pr; G.rect(hk.TX, hk.TY, hk.TW, hk.TH, '#05030c');
   ctx.globalAlpha = 0.08 * pr; G.rect(0, 0, W, H, P.col);
-  // veins crawl out from behind it
   veins.forEach(v => {
     const flick = 0.55 + Math.sin(T * 3 + v.ph) * 0.25 + (Math.random() < 0.03 ? 0.3 : 0);
     const n = Math.max(2, Math.round(v.pts.length * Math.min(1, pr * 1.2)));
@@ -429,25 +568,66 @@ function drawBack() {
     if (pr > 0.8) v.branches.forEach(b => strokeVein(b, P.col, 1, 0.5 * flick * pr));
   });
   ctx.globalAlpha = 1;
-  drawBody();
 }
 
+/** 2. After the wildcard row, before the dice: arms + the bust leaning over the top of the table. */
 function drawBody() {
+  if (!id || cut) return;
+  drawBodyNow(fade);
+}
+function drawBodyNow(f) {
   const { ctx, T } = G;
-  const im = img();
-  const w = im.width * scale, h = im.height * scale;
-  const breathe = !cut && !tasks.length && (frame === 'idle' || frame === 'blink') ? Math.sin(bob * 1.8) * 2 : 0;
-  const dx = Math.round(x + lookX - w / 2), dy = Math.round(y - h + breathe);
+  let a = Math.min(1, presence * 1.1) * f;
+  if (dead) a *= Math.floor(dead * 20) % 2 ? 0.35 : 1;
+  drawArm(0, a); drawArm(1, a);
+  const im = bustImg(), x = bustX(), y = bustY(), w = bustW(), h = bustH();
   ctx.save();
-  let a = Math.min(1, presence * 1.1);
-  if (dead) { a *= Math.floor(dead * 20) % 2 ? 0.35 : 1; ctx.translate(G.rand(-3, 3), 0); }
-  // aura: a glowing silhouette just behind it
+  if (dead) ctx.translate(G.rand(-3, 3), 0);
   const glow = tinted(im, P.col);
-  ctx.globalAlpha = a * (0.28 + Math.sin(T * 2.4) * 0.1);
-  for (const [ox, oy] of [[-3, 0], [3, 0], [0, -3], [0, 3]]) ctx.drawImage(glow, dx + ox, dy + oy, w, h);
+  ctx.globalAlpha = a * (0.3 + Math.sin(T * 2.4) * 0.1);
+  for (const [ox, oy] of [[-3, 0], [3, 0], [0, -3], [0, 3]]) ctx.drawImage(glow, x + ox, y + oy, w, h);
   ctx.globalAlpha = a;
-  ctx.drawImage(im, dx, dy, w, h);
+  ctx.drawImage(im, x, y, w, h);
   ctx.restore();
+}
+
+/** 3. In front of the dice: padlocks, shockwaves, honey, the freeze. */
+function draw() {
+  if (!id || cut) return;
+  const { ctx, text, T, rect } = G;
+  for (const [i, pop] of locks) drawPadlock(hk.dieX(i), hk.dieTop + 22, pop);
+  for (const b of beams) {
+    const p = b.life / b.max, pts = [[b.x1, b.y1]];
+    for (let s = 1; s < 7; s++) pts.push([lerp(b.x1, b.x2, s / 7) + G.rand(-4, 4), lerp(b.y1, b.y2, s / 7) + G.rand(-3, 3)]);
+    pts.push([b.x2, b.y2]);
+    strokeVein(pts, b.col, 3, 0.35 * p); strokeVein(pts, PAL.white, 1, 0.9 * p);
+    ctx.globalAlpha = 1;
+  }
+  for (const r of rings) {
+    ctx.globalAlpha = Math.max(0, r.life) * 0.9;
+    const s = Math.round(r.r);
+    rect(r.x - s, r.y - s / 2, s * 2, 1, P.col); rect(r.x - s, r.y + s / 2, s * 2, 1, P.col);
+    rect(r.x - s, r.y - s / 2, 1, s, P.col); rect(r.x + s, r.y - s / 2, 1, s, P.col);
+  }
+  for (const m of motes) { ctx.globalAlpha = 1; rect(Math.round(m.x), Math.round(m.y), 2, 2, m.col); }
+  ctx.globalAlpha = 1;
+  if (freezeT > 0) {
+    ctx.globalAlpha = 0.25; rect(hk.TX, hk.TY + 30, hk.TW, 80, '#2ce8f5'); ctx.globalAlpha = 1;
+    const cx = hk.TX + hk.TW / 2, cy = hk.TY + 60;
+    for (let k = 0; k < 8; k++) {
+      const a = k / 8 * Math.PI * 2 + T * 6;
+      rect(Math.round(cx + Math.cos(a) * 8) - 1, Math.round(cy + Math.sin(a) * 8) - 1, 3, 3, k === 0 ? PAL.white : '#7d9bff');
+    }
+    text('BUFFERING...', cx, cy + 14, PAL.white, { align: 'center', outline: PAL.ink });
+  }
+}
+
+/** 4. Over everything on the table and the sidebar: the hands and the speech bubble. */
+function drawActor() {
+  if (!id || cut) return;
+  const a = Math.min(1, presence * 1.1) * (dead ? (Math.floor(dead * 20) % 2 ? 0.35 : 1) : 1);
+  drawHand(0, a); drawHand(1, a);
+  drawSpeech();
 }
 
 function drawSpeech() {
@@ -456,17 +636,15 @@ function drawSpeech() {
   const n = Math.min(speech.text.length, Math.floor(speech.t * 45));
   const lines = wrapText(speech.text, 22);
   const w = Math.max(...lines.map(l => l.length)) * 6 + 8, h = lines.length * 9 + 6;
-  const im = img();
   // beside its head, on whichever side has room
-  const right = x + im.width * scale / 2 + 4;
-  let bx = right + w < hk.TX + hk.TW - 2 ? right : x - im.width * scale / 2 - w - 4;
+  const right = bustX() + bustW() - 6;
+  let bx = right + w < hk.TX + hk.TW - 2 ? right : bustX() - w + 6;
   bx = G.clamp(Math.round(bx), 2, G.W - w - 2);
-  const by = Math.max(18, Math.round(topY() + 14));
-  const fade = speech.t > speech.life ? 1 - (speech.t - speech.life) / 0.4 : 1;
-  G.ctx.globalAlpha = Math.max(0, fade);
+  const by = Math.max(18, Math.round(bustY() + 10));
+  const fd = speech.t > speech.life ? 1 - (speech.t - speech.life) / 0.4 : 1;
+  G.ctx.globalAlpha = Math.max(0, fd);
   rrect(bx - 1, by - 1, w + 2, h + 2, PAL.ink);
   rrect(bx, by, w, h, PAL.white);
-  rect(bx < x ? bx + w : bx - 3, by + 4, 3, 3, PAL.white);
   let left = n;
   lines.forEach((l, i) => { const s = l.slice(0, Math.max(0, left)); left -= l.length + 1; T(s, bx + 4, by + 3 + i * 9, PAL.ink); });
   G.ctx.globalAlpha = 1;
@@ -481,46 +659,7 @@ function drawPadlock(cx, ty, pop) {
   rect(Math.round(cx) - 1, y0 + 2, 2, 3, PAL.ink);
 }
 
-/** In front of the dice: its marks, beams, shockwaves, particles, the freeze. */
-function draw() {
-  if (!id || cut) return;
-  const { ctx, text, T, rect } = G;
-  for (const [i, pop] of locks) drawPadlock(hk.dieX(i), hk.dieTop + 22, pop);
-  for (const b of beams) {
-    const p = b.life / b.max;
-    const pts = [[b.x1, b.y1]];
-    for (let s = 1; s < 7; s++) pts.push([lerp(b.x1, b.x2, s / 7) + G.rand(-4, 4), lerp(b.y1, b.y2, s / 7) + G.rand(-3, 3)]);
-    pts.push([b.x2, b.y2]);
-    strokeVein(pts, b.col, 3, 0.35 * p);
-    strokeVein(pts, PAL.white, 1, 0.9 * p);
-    ctx.globalAlpha = 1;
-  }
-  for (const r of rings) {
-    ctx.globalAlpha = Math.max(0, r.life) * 0.9;
-    const s = Math.round(r.r);
-    rect(r.x - s, r.y - s / 2, s * 2, 1, P.col); rect(r.x - s, r.y + s / 2, s * 2, 1, P.col);
-    rect(r.x - s, r.y - s / 2, 1, s, P.col); rect(r.x + s, r.y - s / 2, 1, s, P.col);
-  }
-  for (const m of motes) { if (m.t >= 0) { ctx.globalAlpha = 1; rect(Math.round(m.x), Math.round(m.y), 2, 2, m.col); } }
-  ctx.globalAlpha = 1;
-  if (freezeT > 0) {
-    ctx.globalAlpha = 0.25; rect(hk.TX, hk.TY + 30, hk.TW, 80, '#2ce8f5'); ctx.globalAlpha = 1;
-    const cx = hk.TX + hk.TW / 2, cy = hk.TY + 60;
-    for (let k = 0; k < 8; k++) {
-      const a = k / 8 * Math.PI * 2 + T * 6;
-      rect(Math.round(cx + Math.cos(a) * 8) - 1, Math.round(cy + Math.sin(a) * 8) - 1, 3, 3, k === 0 ? PAL.white : '#7d9bff');
-    }
-    text('BUFFERING...', cx, cy + 14, PAL.white, { align: 'center', outline: PAL.ink });
-  }
-}
-
-/** Speech bubble on top of everything (incl. the sidebar). */
-function drawActor() {
-  if (!id || cut) return;
-  drawSpeech();
-}
-
-/** Over the perk strip: the SANDBOX cage. Call after the perk strip is drawn. */
+/** Over the perk strip: the SANDBOX cage. */
 function drawCage() {
   if (!caged) return;
   const { rect, ctx } = G;
@@ -540,19 +679,19 @@ function drawCut() {
   if (!cut) return;
   const { rect, text, ctx, T, W, H } = G;
   const t = cut.t;
-  // darkness everywhere, then the boss rising out of it
   ctx.globalAlpha = Math.min(0.55, t * 1.5); rect(0, 0, W, H, '#05030c'); ctx.globalAlpha = 1;
   drawBack();
+  drawBodyNow(1);
+  drawHand(0, Math.min(1, presence * 1.1)); drawHand(1, Math.min(1, presence * 1.1));
   const bar = yy => {
     rect(0, yy, W, 11, Math.floor(T * 6) % 2 ? '#3a0610' : '#1a0408');
     for (let k = -2; k < W / 12 + 2; k++) rect(((k * 12 + T * 40) % (W + 24)) - 12, yy, 6, 11, '#e43b44');
     rect(0, yy + 2, W, 7, '#1a0408');
     text('!! INTRUSION DETECTED !!   BOSS FIREWALL ' + run.round + '/' + RULES.ROUNDS + '   !! INTRUSION DETECTED !!', W / 2, yy + 2, PAL.white, { align: 'center' });
   };
-  if (t > 0.05) { bar(18); bar(H - 30); }
-  // name card under it
-  if (t > 1.6) {
-    const p = Math.min(1, (t - 1.6) / 0.25);
+  if (t > 0.05) { bar(4); bar(H - 30); }
+  if (t > 1.8) {
+    const p = Math.min(1, (t - 1.8) / 0.25);
     const cx = hk.TX + hk.TW / 2, yy = hk.TY + hk.TH - 44;
     const off = Math.round((1 - p) * 60);
     ctx.globalAlpha = 0.75 * p; rect(hk.TX, yy - 4, hk.TW, 42, '#05030c');
@@ -569,7 +708,7 @@ function drawCut() {
 
 return {
   setup, active, intro, skip, resume, beforeRoll, afterLand, onScore, bite, react, defeat, gloat,
-  update, drawBack, draw, drawActor, drawCage, drawCut,
+  update, drawBack, drawBody, draw, drawActor, drawCage, drawCut,
   get inCut() { return !!cut; },
   get busy() { return busy || tasks.length > 0; },
   get held() { return held; },

@@ -897,8 +897,9 @@ function render() {
   }
 
   drawTable();
-  BOSS.drawBack();          // boss rounds: the lair, its veins, and the boss looming behind the dice
+  BOSS.drawBack();          // boss rounds: the lair and its energy veins
   drawWildRow();
+  BOSS.drawBody();          // its arms + bust leaning over the top of the table (in front of wildcards, behind dice)
   for (let i = 0; i < N; i++) {
     const p = slotDrop(i);
     if (p > 0) drawSlot(i, Math.round((1 - G.easeOutBack(p)) * -140));
@@ -918,8 +919,8 @@ function render() {
   if (isOverlay()) BOSS.drawActor();
   drawOverlay();
   drawSidebar();
-  if (!isOverlay()) BOSS.drawActor();
   drawHUD();
+  if (!isOverlay()) BOSS.drawActor();   // the boss's hands grip the table over the top bar
   drawFloats();
 
   if (mode === 'ready' && hoverPerk < 0 && hoverWild < 0 && selWild < 0 && Math.floor(T * 2) % 2 === 0)

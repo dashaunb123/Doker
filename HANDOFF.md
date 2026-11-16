@@ -53,7 +53,8 @@ Plain `<script>` files (no modules, so it runs from `file://`). Load order matte
 | `js/ui.js` | Shared drawing: panels, buttons, item cards, pack art, info box |
 | `js/shop.js` | Black Market + pack opening |
 | `js/boss.js` | Boss actors: personas/quips, intro cutscene, task-queue animations, rule set-pieces (stomp, padlock, eat rolls, cage, bite) |
-| `js/bossart.js` | Boss sprite frames (idle, blink, act, peek, hurt) |
+| `js/bossloom.js` | Looming boss art: 2x bust (idle/blink/act/peek/hurt), hand (grip/open/fist/point), shoulder + wrist anchors, arm colours |
+| `js/bossart.js` | Older full-body boss sprites — only used as a fallback if a boss has no loom art |
 | `js/play.js` | The table: run flow, dice animation, scoring sequence, sidebar, perk strip, autosave (`localStorage` key `doker.save.v1`) |
 | `js/menu.js` | Boot + menu scene, main loop, input, scene transitions, shared helpers (`window.G`) |
 
