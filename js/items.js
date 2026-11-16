@@ -291,9 +291,31 @@ function rollItems(n, pool, boost = 1) {
 }
 
 // ============================================================
+//  BOSS FIREWALLS — rounds 4 and 8 bend one rule; shown one round early
+// ============================================================
+const BOSSES = {
+  encryption: { name: 'ENCRYPTION', short: '6S COUNT FOR NOTHING', text: 'EVERY 6 IS ENCRYPTED AND COUNTS FOR NOTHING.' },
+  lag:        { name: 'LAG',        short: 'ONLY 7 ROLLS', text: 'ONLY 7 ROLLS.' },
+  sandbox:    { name: 'SANDBOX',    short: 'PERKS OFFLINE', text: 'YOUR PERKS ARE OFFLINE.' },
+  ddos:       { name: 'DDOS',       short: 'ONE DIE STUCK ON 1', text: 'ONE DIE IS STUCK ON 1.' },
+  honeypot:   { name: 'HONEYPOT',   short: 'PAIRS SCORE NEGATIVE', text: 'PAIRS SCORE NEGATIVE.' },
+};
+const BOSS_ROUNDS = [4, 8];
+const BOSS_BOUNTY = 2;
+function rollBosses() {
+  const ids = Object.keys(BOSSES).sort(() => Math.random() - 0.5);
+  const out = {};
+  BOSS_ROUNDS.forEach((r, i) => (out[r] = ids[i]));
+  return out;
+}
+const bossOf = (run, r = run.round) => (run.bosses || {})[r] || null;
+
+// ============================================================
 //  PERK ENGINE — dice odds, rolls per firewall, scoring hooks
 // ============================================================
-const perksOf = (run, id) => run.perks.filter(p => p.id === id);
+/** Perks that are working right now (SANDBOX switches them all off). */
+const activePerks = run => (run.boss === 'sandbox' ? [] : run.perks);
+const perksOf = (run, id) => activePerks(run).filter(p => p.id === id);
 
 function handStats(run, key) {
   const v = handValue(key, run.levels[key] ?? 1);
@@ -303,17 +325,18 @@ function handStats(run, key) {
 
 function rollsPerRound(run) {
   let n = RULES.ROLLS;
-  for (const p of run.perks) {
+  for (const p of activePerks(run)) {
     if (p.id === 'socket') n += p.stats.amt;
     if (p.stats.catchRoll) n -= 1;
   }
+  if (run.boss === 'lag') n = Math.min(n, 7);   // LAG boss: hard cap
   return Math.max(1, n);
 }
 
 /** Relative weight of faces 1..6 (index 0 unused). */
 function dieWeights(run) {
   const w = [0, 1, 1, 1, 1, 1, 1];
-  for (const p of run.perks) {
+  for (const p of activePerks(run)) {
     if (p.id === 'loaded') w[p.stats.face] *= 1 + p.stats.pct / 100;
     if (p.id === 'streak' && p.stats.stacks > 0) w[p.stats.face] *= 1 + (p.stats.pct * p.stats.stacks) / 100;
   }
@@ -356,9 +379,14 @@ function evalHand(run, faces, phantom = 0) {
   const notes = [];
   const vals = faces.map(f => (ducky && f === 1 ? 6 : f));
   if (ducky) faces.forEach((f, i) => { if (f === 1) notes.push({ i, txt: '1=6' }); });
+  // ENCRYPTION boss: 6s are scrambled and count for nothing
+  const enc = faces.map((_, i) => run.boss === 'encryption' && vals[i] === 6);
+  enc.forEach((e, i) => { if (e) notes.push({ i, txt: 'ENCRYPTED' }); });
   let dropped = -1;
-  if (has('packetloss')) { dropped = 0; vals.forEach((v, i) => { if (v < vals[dropped]) dropped = i; }); }
-  const live = faces.map((_, i) => i).filter(i => i !== dropped);
+  if (has('packetloss')) {
+    faces.forEach((_, i) => { if (!enc[i] && (dropped < 0 || vals[i] < vals[dropped])) dropped = i; });
+  }
+  const live = faces.map((_, i) => i).filter(i => i !== dropped && !enc[i]);
   const wildIdx = glitch ? live.filter(i => faces[i] === glitch.state.face) : [];
 
   let best = null;
@@ -389,7 +417,7 @@ function evalHand(run, faces, phantom = 0) {
   const { ev, vv, slot } = best;
   const scoring = faces.map(() => false);
   live.forEach((i, j) => { if (slot !== j) scoring[i] = ev.scoring[j]; });
-  const chipVals = faces.map((_, i) => (i === dropped ? null : vv[i]));
+  const chipVals = faces.map((_, i) => (i === dropped || enc[i] ? null : vv[i]));
   for (const i of wildIdx) notes.push({ i, txt: 'WILD=' + vv[i] });
   return {
     key: ev.key, scoring, sum: chipVals.reduce((a, v) => a + (v || 0), 0), vals: chipVals,

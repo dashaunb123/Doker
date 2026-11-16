@@ -31,6 +31,7 @@ function handValue(key, level = 1) {
 
 /** Which hand five dice make, and which dice are part of it. */
 function evaluateDice(faces, opts = {}) {
+  if (!faces.length) return { key: 'bust', scoring: [], sum: 0 };
   const cnt = {};
   faces.forEach(f => (cnt[f] = (cnt[f] || 0) + 1));
   const groups = Object.entries(cnt).map(([f, c]) => ({ f: +f, c })).sort((a, b) => b.c - a.c || b.f - a.f);

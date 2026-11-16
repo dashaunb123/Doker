@@ -129,6 +129,7 @@ function continueRun() {
   if (!d) return false;
   run = d.run;
   run.wilds = run.wilds || [];
+  if (!run.bosses) { run.bosses = rollBosses(); run.boss = bossOf(run); }
   // keep new item ids unique past the restored ones
   for (const p of run.perks) if (p.uid > _uid) _uid = p.uid;
   if (d.shop) for (const it of [...(d.shop.items || []), ...((d.shop.pack && d.shop.pack.items) || [])]) if (it && it.uid > _uid) _uid = it.uid;
@@ -147,6 +148,7 @@ function newRun() {
   run = {
     round: 0, target: 0, score: 0, rollsLeft: 0, rollsRound: 0, money: RULES.START_MONEY, rollsUsed: 0,
     levels: {}, bonus: {}, perks: [], wilds: [], hot: 0, pity: 0, prevKey: null, hotShieldUsed: false, phantom: 0, seenKeys: [],
+    bosses: rollBosses(), boss: null, ddosDie: -1,
   };
   startRound(1);
 }
@@ -155,6 +157,8 @@ function startRound(r) {
   run.round = r;
   run.target = RULES.target(r);
   run.score = 0; shownScore = 0;
+  run.boss = bossOf(run);
+  run.ddosDie = run.boss === 'ddos' ? G.randi(0, N - 1) : -1;
   onRoundStart(run);
   run.rollsLeft = rollsPerRound(run);
   run.rollsRound = 0;
@@ -162,6 +166,7 @@ function startRound(r) {
   dice.forEach(d => (d.scoring = false));
   setMode('intro');
   if (r > 1) SFX.whoosh();
+  if (run.boss) { SFX.fail(); G.glitch(0.5); G.shake(3); }
   saveRun('round');
 }
 
@@ -182,7 +187,9 @@ function rollAll() {
   run.phantom = wildsOf(run, 'phantom').length ? rollFace(w) : 0;
   dice.forEach(d => (d.dropped = false));
   const finals = dice.map(() => rollFace(w));
+  if (run.ddosDie >= 0) finals[run.ddosDie] = 1;
   const flips = bitFlips(run, finals);
+  if (run.ddosDie >= 0) delete flips[run.ddosDie];
   dice.forEach((d, i) => Object.assign(d, {
     phase: 'wait', t: 0, delay: i * STAGGER, final: finals[i], flipTo: flips[i] || 0, flips: 0, scoring: false,
   }));
@@ -206,11 +213,12 @@ function startScoring() {
   const lv = run.levels[sc.key] ?? 1;
   result = { key: sc.key, name: h.name, col: h.col, tier: h.tier };
   cur = { proto: h.proto, lv, col: h.col, chips: 0, mult: 0, total: 0, showTotal: false, cp: 0, mp: 0, tp: 0 };
-  dice.forEach((d, i) => { d.scoring = sc.scoring[i]; d.dropped = sc.dropped === i; });
+  dice.forEach((d, i) => { d.scoring = sc.scoring[i]; d.dropped = sc.vals[i] == null; });
   setMode('scoring');
   // rule-benders announce themselves on the dice
   sc.notes.forEach(n => at(0.05, () => floats.push({ x: dieX(n.i), y: SY - 16, txt: n.txt, col: PAL.magenta, life: 1.2 })));
   if (sc.dropped >= 0) at(0.05, () => { floats.push({ x: dieX(sc.dropped), y: SY - 16, txt: 'DROPPED', col: '#8a7fc0', life: 1.2 }); wildsOf(run, 'packetloss').forEach(popPerk); });
+  const honeypot = run.boss === 'honeypot' && sc.key === 'pair';
   if (sc.phantomUsed) at(0.05, () => wildsOf(run, 'phantom').forEach(w => { popPerk(w); wildFloat(w, 'GHOST ' + run.phantom, PAL.cyan); }));
 
   let t = 0;
@@ -261,15 +269,16 @@ function startScoring() {
   });
   t += 0.2;
   at(t, () => {
-    cur.total = Math.round(cur.chips * cur.mult);
+    cur.total = Math.round(cur.chips * cur.mult) * (honeypot ? -1 : 1);
     cur.showTotal = true; cur.tp = 1;
+    if (honeypot) { floats.push({ x: CX, y: 104, txt: 'HONEYPOT!', col: PAL.red, life: 1.4, big: true }); SFX.deny(); G.glitch(0.4); }
     const power = cur.total / run.target;
     SFX.multHit(power);
     G.shake(Math.min(5, 1 + power * 5));
   });
   t += 0.75;
   at(t, () => {
-    run.score += cur.total; SFX.coin(); afterRoll(run, sc.key, faces);
+    run.score = Math.max(0, run.score + cur.total); SFX.coin(); afterRoll(run, sc.key, faces);
     // CRYPTO MINER pays out for every 6
     const sixes = faces.filter(f => f === 6).length;
     if (sixes) for (const w of wildsOf(run, 'miner')) { run.money += sixes; popPerk(w); wildFloat(w, '+$' + sixes, PAL.gold); }
@@ -294,6 +303,7 @@ function breach() {
   if (run.rollsLeft > 0) rows.push(['UNUSED ROLLS X' + run.rollsLeft, run.rollsLeft]);
   const intr = interestFor(run);
   if (intr > 0) rows.push(['COMPOUND INTEREST', intr]);
+  if (run.boss) rows.push(['BOSS BOUNTY', BOSS_BOUNTY]);
   const gold = run.wilds.filter(w => w.edition === 'gold').length;
   if (gold) rows.push(['GOLD WILDCARD' + (gold > 1 ? 'S X' + gold : ''), 2 * gold]);
   reward = { rows, total: rows.reduce((a, r) => a + r[1], 0), shown: 0 };
@@ -488,7 +498,8 @@ function drawSidebar() {
   // firewall + target (in the shop: the NEXT firewall)
   const r = inShop ? run.round + 1 : run.round;
   UI.panel(SBX, 20, SBW, 42, PAL.red);
-  text(inShop ? 'NEXT UP' : 'FIREWALL', x, 24, '#8a7fc0');
+  const bossR = bossOf(run, r);
+  text(bossR ? (inShop ? 'NEXT: BOSS' : 'BOSS') : inShop ? 'NEXT UP' : 'FIREWALL', x, 24, bossR ? PAL.red : '#8a7fc0');
   text(r + '/' + RULES.ROUNDS, R, 24, PAL.green, { align: 'right' });
   text('TARGET', x, 35, '#8a7fc0');
   UI.boxNum(fmtNum(RULES.target(r)), SBX + SBW / 2, 45, SBW, PAL.gold);
@@ -681,6 +692,10 @@ function drawSlot(i, off) {
   if (d.scoring && result) { col = Math.floor(T * 6) % 2 ? result.col : PAL.white; e = 1 + Math.round(Math.abs(Math.sin(T * 5))); }
   else if (hover >= 0) { col = hover === i ? PAL.green : PAL.mgreen; e = hover === i ? 1 + Math.round(Math.abs(Math.sin(T * 8))) : 0; }
   else if (d.phase === 'air' || d.phase === 'wait') col = PAL.mgreen;
+  if (i === run.ddosDie) {
+    col = PAL.red; e = Math.floor(T * 4) % 2;
+    text('STUCK ON 1', x + SLOT / 2, y + SLOT + 4, PAL.red, { align: 'center', outline: PAL.ink });
+  }
   drawBrackets(x, y, SLOT, SLOT, col, e);
 }
 
@@ -726,7 +741,8 @@ function drawResult() {
   if (cur && cur.showTotal) {
     const pop = easeOutBack(clamp(1 - cur.tp, 0, 1));
     G.ctx.globalAlpha = clamp(pop, 0, 1);
-    text('+' + fmtNum(cur.total), CX, 140 + Math.round((1 - pop) * 8), PAL.gold, { align: 'center', scale: 2, outline: PAL.ink });
+    const neg = cur.total < 0;
+    text((neg ? '-' : '+') + fmtNum(Math.abs(cur.total)), CX, 140 + Math.round((1 - pop) * 8), neg ? PAL.red : PAL.gold, { align: 'center', scale: 2, outline: PAL.ink });
     G.ctx.globalAlpha = 1;
   }
 }
@@ -740,10 +756,13 @@ function drawIntro() {
   const y = 118;
   ctx.save();
   ctx.beginPath(); ctx.rect(TX, TY, TW, TH); ctx.clip();
-  ctx.globalAlpha = 0.88; rect(TX + dx, y, TW, 34, PAL.ink); ctx.globalAlpha = 1;
-  rect(TX + dx, y, TW, 1, PAL.green); rect(TX + dx, y + 33, TW, 1, PAL.green);
-  text('FIREWALL ' + run.round + '/' + RULES.ROUNDS, CX + dx, y + 5, PAL.white, { align: 'center', scale: 2, shadow: PAL.ink });
-  text('TARGET ' + fmtNum(run.target) + '  //  ' + run.rollsLeft + ' ROLLS', CX + dx, y + 23, PAL.green, { align: 'center' });
+  const boss = run.boss && BOSSES[run.boss];
+  const bh = boss ? 44 : 34, by = boss ? y - 10 : y, acc = boss ? PAL.red : PAL.green;
+  ctx.globalAlpha = 0.88; rect(TX + dx, by, TW, bh, boss ? '#1a0408' : PAL.ink); ctx.globalAlpha = 1;
+  rect(TX + dx, by, TW, 1, acc); rect(TX + dx, by + bh - 1, TW, 1, acc);
+  text((boss ? 'BOSS: ' + boss.name : 'FIREWALL ' + run.round + '/' + RULES.ROUNDS), CX + dx, by + 5, boss ? PAL.red : PAL.white, { align: 'center', scale: 2, shadow: PAL.ink });
+  if (boss) text(boss.text, CX + dx, by + 22, PAL.white, { align: 'center' });
+  text('TARGET ' + fmtNum(run.target) + '  //  ' + run.rollsLeft + ' ROLLS', CX + dx, by + bh - 11, acc, { align: 'center' });
   ctx.restore();
 }
 
@@ -808,6 +827,15 @@ function drawHUD() {
   rect(0, 15, W, 1, PAL.purple);
   rrect(3, 2, 46, 11, menuHover ? PAL.green : '#2e2260');
   text('< MENU', 6, 4, menuHover ? PAL.ink : PAL.white);
+  // boss warning: during the boss firewall, and one round early (incl. the shop before it)
+  const HX = (52 + W - 60) / 2;
+  if (mode !== 'shop' && run.boss) {
+    const b = BOSSES[run.boss];
+    text((Math.floor(G.T * 3) % 2 ? '! ' : '  ') + 'BOSS ' + b.name + ': ' + b.short, HX, 4, PAL.red, { align: 'center' });
+  } else {
+    const nb = bossOf(run, run.round + 1);
+    if (nb) text('BOSS NEXT: ' + BOSSES[nb].name + ' // ' + BOSSES[nb].short, HX, 4, PAL.orange, { align: 'center' });
+  }
   text('RUN $' + run.money, W - 5, 4, PAL.gold, { align: 'right' });
 }
 
@@ -902,6 +930,7 @@ return {
   // dev hooks for testing
   get run() { return run; },
   debugShop() { openShop(null); },
+  debugRound(r, boss) { if (boss) run.bosses[r] = boss; startRound(r); },
   hasSave: () => !!loadSave(),
   queueContinue() { pendingContinue = true; },
 };

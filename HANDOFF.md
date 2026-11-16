@@ -28,7 +28,7 @@ Controls: mouse, or **Space** = roll · **Esc** = back to menu · **M** = mute a
 | Autosave + CONTINUE on the menu; crash guard keeps the game running after an error | Done |
 | Decluttered table (no slot labels under dice, no HOUSE OF BONES / TABLE text) | Done |
 | Wildcards: all 19 from DESIGN.md §6, 5 slots on the felt, sell/move, editions, Wildcard Drop pack, slots-full swap in shop | Done |
-| Boss firewalls (rounds 4 and 8 with rule twists) | Planned |
+| Boss firewalls: rounds 4 + 8 get ENCRYPTION / LAG / SANDBOX / DDOS / HONEYPOT, warned one round early | Done |
 | Exploits, upgradable dice, starting rigs, Dealer reactions | Planned |
 | Extra hand types (Small Straight, Parity, Bookends) | Needs precedence rules first |
 | Seeds / daily run, endless mode | Parked |
@@ -74,6 +74,8 @@ Append to `index.html`:
 
 - `&wilds=dealer,mirror,botnet` — start with those wildcards (`&wilds=3` = 3 random); `&ed=holo` forces an edition
 
+- `&round=4&boss=ddos` — jump to a firewall, optionally forcing its boss
+
 Example: `index.html?play&perks=14&auto&ff=60`
 
 ## Decisions made without the user (worth confirming)
@@ -87,12 +89,15 @@ Example: `index.html?play&perks=14&auto&ff=60`
   Order of scoring: dice → perks → wildcards left to right (each with its edition). MIRROR copies only the
   scoring of the card to its right (not rule changes like Rubber Ducky). PHANTOM can't make straights.
   ZERO DAY ignores Bust. COOKIE JAR counts this roll's 1s immediately.
+- Bosses: two different random bosses per run (rounds 4 and 8), same targets as normal rounds, +$2 BOSS BOUNTY
+  on breach. ENCRYPTION: 6s (incl. Rubber Ducky 6s) count for nothing. LAG: hard cap of 7 rolls even with
+  Extra Socket. SANDBOX: perks fully off (incl. dice odds, extra rolls, interest). HONEYPOT: a Pair subtracts
+  its score (score can't go below 0).
 
 ## Next steps
 
-1. **Boss firewalls** on rounds 4 and 8.
-2. Playtest the sound/music levels and the overall balance (wildcards make runs much stronger — targets may need a bump).
-3. Wildcard follow-ups: drag-to-reorder (now click → MOVE buttons), wildcard sell from inside the shop
+1. Playtest the sound/music levels and the overall balance (wildcards make runs much stronger — targets may need a bump).
+2. Wildcard follow-ups: drag-to-reorder (now click → MOVE buttons), wildcard sell from inside the shop
    (now only via the slots-full prompt), more than 5 slots as a reward.
 
 ## Git

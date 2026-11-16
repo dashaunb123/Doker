@@ -780,6 +780,8 @@ function update(dt) {
         const ids = /^\d+$/.test(v) ? WILD_IDS.slice().sort(() => Math.random() - 0.5).slice(0, +v) : v.split(',');
         ids.slice(0, WILD_SLOTS).forEach(id => applyItem(PLAY.run, makeWild(id, params.get('ed') || undefined)));
       }
+      // ?round=4&boss=ddos  jump to a firewall (optionally forcing its boss)
+      if (params.has('round')) PLAY.debugRound(+params.get('round'), params.get('boss'));
       if (params.has('shop') || params.has('pack')) { PLAY.run.money = 40; PLAY.debugShop(); }
       if (params.has('pack')) SHOP.debugOpen(params.get('pack') || 'perk');
       if (params.has('auto')) PLAY.auto = true;
