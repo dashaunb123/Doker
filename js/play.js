@@ -17,12 +17,14 @@ const SBX = 4, SBW = 96;                              // sidebar
 const OX = TX + 20, OW = TW - 40, OY = 34, OH = 124;  // overlay panel
 const PSX = TX, PSY = 174, BADGE_W = 24, BADGE_H = 11, BADGE_GAP = 3, BADGES_PER_ROW = 10;
 const CHIPS_BOX = { x: SBX + 4 + 19, y: 120 }, MULT_BOX = { x: SBX + SBW - 4 - 19, y: 120 };
+const WW = 40, WH = 28, WG = 6, WY = 25;                                  // wildcard row on the felt
+const WX0 = TX + Math.floor((TW - (WILD_SLOTS * WW + (WILD_SLOTS - 1) * WG)) / 2);
 
 // ---------- timings ----------
 const AIR = 0.62, SETTLE = 0.42, STAGGER = 0.2, FLIPS = 5, INTRO = 1.5;
 
 const TABLE_RAMP = [[4,10,12],[8,16,22],[12,24,32],[18,30,46],[26,36,60],[34,44,74],[44,54,90]];
-const TICK = '*** BREACH ALL 8 FIREWALLS *** SCORE = (HAND CHIPS + DICE) X MULT *** PERKS TRIGGER AFTER THE DICE *** HOVER A PERK BELOW THE TABLE TO READ IT *** SPACE = ROLL   ESC = MENU   M = MUTE   N = MUSIC *** ';
+const TICK = '*** BREACH ALL 8 FIREWALLS *** SCORE = (HAND CHIPS + DICE) X MULT *** PERKS TRIGGER AFTER THE DICE, THEN WILDCARDS LEFT TO RIGHT *** CLICK A WILDCARD TO SELL OR MOVE IT *** SPACE = ROLL   ESC = MENU   M = MUTE   N = MUSIC *** ';
 const HEX = '0123456789ABCDEF';
 
 // ---------- state ----------
@@ -36,6 +38,7 @@ let reward = null;
 let btns = [], hoverBtn = -1, prevHoverBtn = -1;
 let hover = -1, prevHover = -1, menuHover = false, prevMenuHover = false;
 let hoverPerk = -1, prevHoverPerk = -1;
+let hoverWild = -1, prevHoverWild = -1, selWild = -1, wbtns = [], hoverWBtn = -1, prevHoverWBtn = -1;
 const badgePop = new Map();
 let felt = null;
 let auto = false;
@@ -53,6 +56,17 @@ function loadSave() {
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } }
 
 const slotX = i => SX0 + i * (SLOT + GAP);
+const wildX = i => WX0 + i * (WW + WG);
+const canEditWilds = () => mode === 'ready' || mode === 'intro';
+function removeWild(w) {
+  const k = run.wilds.indexOf(w);
+  if (k >= 0) run.wilds.splice(k, 1);
+  selWild = -1;
+}
+function wildFloat(w, txt, col, big) {
+  const k = run.wilds.indexOf(w);
+  floats.push({ x: wildX(Math.max(0, k)) + WW / 2, y: WY + WH + 2, txt, col, life: 1.1, big });
+}
 const dieX = i => slotX(i) + SLOT / 2;
 const slotDrop = i => G.clamp((enterT - 0.15 - i * 0.07) / 0.45, 0, 1);
 const isOverlay = () => mode === 'cleared' || mode === 'failed' || mode === 'won';
@@ -114,6 +128,7 @@ function continueRun() {
   const d = loadSave();
   if (!d) return false;
   run = d.run;
+  run.wilds = run.wilds || [];
   // keep new item ids unique past the restored ones
   for (const p of run.perks) if (p.uid > _uid) _uid = p.uid;
   if (d.shop) for (const it of [...(d.shop.items || []), ...((d.shop.pack && d.shop.pack.items) || [])]) if (it && it.uid > _uid) _uid = it.uid;
@@ -131,7 +146,7 @@ function continueRun() {
 function newRun() {
   run = {
     round: 0, target: 0, score: 0, rollsLeft: 0, rollsRound: 0, money: RULES.START_MONEY, rollsUsed: 0,
-    levels: {}, bonus: {}, perks: [], hot: 0, pity: 0, prevKey: null, hotShieldUsed: false,
+    levels: {}, bonus: {}, perks: [], wilds: [], hot: 0, pity: 0, prevKey: null, hotShieldUsed: false, phantom: 0, seenKeys: [],
   };
   startRound(1);
 }
@@ -154,10 +169,18 @@ function setMode(m) { mode = m; modeT = 0; btns = []; hoverBtn = prevHoverBtn = 
 
 function rollAll() {
   if (mode !== 'ready') return;
+  selWild = -1;
   run.rollsLeft--; run.rollsUsed++; run.rollsRound++;
   result = null; cur = null;
   setMode('rolling');
+  // RANSOMWARE takes its cut before the dice leave your hand
+  for (const w of wildsOf(run, 'ransom')) {
+    if (run.money >= 1) { run.money--; wildFloat(w, '-$1', PAL.red); }
+    else { wildFloat(w, 'DELETED', PAL.red); removeWild(w); SFX.deny(); G.glitch(0.3); }
+  }
   const w = dieWeights(run);
+  run.phantom = wildsOf(run, 'phantom').length ? rollFace(w) : 0;
+  dice.forEach(d => (d.dropped = false));
   const finals = dice.map(() => rollFace(w));
   const flips = bitFlips(run, finals);
   dice.forEach((d, i) => Object.assign(d, {
@@ -175,13 +198,20 @@ function popPerk(p) { badgePop.set(p.uid, 1); }
 
 function startScoring() {
   const faces = dice.map(d => d.face);
-  const sc = scoreRoll(run, faces, { first: run.rollsRound === 1, last: run.rollsLeft === 0, prevKey: run.prevKey });
+  const sc = scoreRoll(run, faces, {
+    first: run.rollsRound === 1, last: run.rollsLeft === 0, prevKey: run.prevKey,
+    rollsRound: run.rollsRound, scoreBefore: run.score, phantom: run.phantom,
+  });
   const h = HANDS[sc.key];
   const lv = run.levels[sc.key] ?? 1;
   result = { key: sc.key, name: h.name, col: h.col, tier: h.tier };
   cur = { proto: h.proto, lv, col: h.col, chips: 0, mult: 0, total: 0, showTotal: false, cp: 0, mp: 0, tp: 0 };
-  dice.forEach((d, i) => (d.scoring = sc.scoring[i]));
+  dice.forEach((d, i) => { d.scoring = sc.scoring[i]; d.dropped = sc.dropped === i; });
   setMode('scoring');
+  // rule-benders announce themselves on the dice
+  sc.notes.forEach(n => at(0.05, () => floats.push({ x: dieX(n.i), y: SY - 16, txt: n.txt, col: PAL.magenta, life: 1.2 })));
+  if (sc.dropped >= 0) at(0.05, () => { floats.push({ x: dieX(sc.dropped), y: SY - 16, txt: 'DROPPED', col: '#8a7fc0', life: 1.2 }); wildsOf(run, 'packetloss').forEach(popPerk); });
+  if (sc.phantomUsed) at(0.05, () => wildsOf(run, 'phantom').forEach(w => { popPerk(w); wildFloat(w, 'GHOST ' + run.phantom, PAL.cyan); }));
 
   let t = 0;
   at(t, () => {
@@ -194,10 +224,11 @@ function startScoring() {
   t += 0.55;
   for (let i = 0; i < N; i++) {
     at(t, () => {
-      const d = dice[i];
+      const d = dice[i], v = sc.vals[i];
+      if (v == null) return;
       d.pop = 1;
-      cur.chips += d.face; cur.cp = 1;
-      floats.push({ x: dieX(i), y: SY - 8, txt: '+' + d.face, col: '#7d9bff', life: 0.9 });
+      cur.chips += v; cur.cp = 1;
+      floats.push({ x: dieX(i), y: SY - 8, txt: '+' + v, col: '#7d9bff', life: 0.9 });
       SFX.chip(i);
     });
     t += 0.13;
@@ -207,8 +238,11 @@ function startScoring() {
     t += 0.12;
     at(t, () => {
       popPerk(s.p);
-      const bx = badgeXY(run.perks.indexOf(s.p));
-      floats.push({ x: bx.x + BADGE_W / 2, y: bx.y - 9, txt: PERK_DEFS[s.p.id].name, col: RARITY.col[s.p.rarity], life: 1.1 });
+      if (s.p.kind === 'wild') wildFloat(s.p, itemName(s.p), RARITY.col[s.p.rarity]);
+      else {
+        const bx = badgeXY(run.perks.indexOf(s.p));
+        floats.push({ x: bx.x + BADGE_W / 2, y: bx.y - 9, txt: PERK_DEFS[s.p.id].name, col: RARITY.col[s.p.rarity], life: 1.1 });
+      }
       if (s.kind === 'chips') {
         cur.chips += s.amt; cur.cp = 1;
         floats.push({ x: CHIPS_BOX.x, y: CHIPS_BOX.y, txt: '+' + fmtNum(s.amt), col: '#7d9bff', life: 0.9 });
@@ -234,14 +268,23 @@ function startScoring() {
     G.shake(Math.min(5, 1 + power * 5));
   });
   t += 0.75;
-  at(t, () => { run.score += cur.total; SFX.coin(); afterRoll(run, sc.key, faces); });
+  at(t, () => {
+    run.score += cur.total; SFX.coin(); afterRoll(run, sc.key, faces);
+    // CRYPTO MINER pays out for every 6
+    const sixes = faces.filter(f => f === 6).length;
+    if (sixes) for (const w of wildsOf(run, 'miner')) { run.money += sixes; popPerk(w); wildFloat(w, '+$' + sixes, PAL.gold); }
+  });
   t += 0.6;
   at(t, endRoll);
 }
 
 function endRoll() {
   if (run.score >= run.target) breach();
-  else if (run.rollsLeft <= 0) fail();
+  else if (run.rollsLeft <= 0) {
+    const fw = wildsOf(run, 'firewall')[0];
+    if (fw) { wildFloat(fw, 'FIREWALL BURNED', PAL.orange, true); removeWild(fw); G.flash(0.4); G.shake(4); breach(); }
+    else fail();
+  }
   else { setMode('ready'); saveRun('round'); }
 }
 
@@ -251,6 +294,8 @@ function breach() {
   if (run.rollsLeft > 0) rows.push(['UNUSED ROLLS X' + run.rollsLeft, run.rollsLeft]);
   const intr = interestFor(run);
   if (intr > 0) rows.push(['COMPOUND INTEREST', intr]);
+  const gold = run.wilds.filter(w => w.edition === 'gold').length;
+  if (gold) rows.push(['GOLD WILDCARD' + (gold > 1 ? 'S X' + gold : ''), 2 * gold]);
   reward = { rows, total: rows.reduce((a, r) => a + r[1], 0), shown: 0 };
   SFX.breach();
   G.flash(0.35); G.glitch(0.25);
@@ -332,12 +377,19 @@ function update(dt) {
   if (mode === 'shop') { SHOP.update(dt); updateFx(dt); return; }
 
   // ---- hover ----
-  hover = -1; hoverBtn = -1; hoverPerk = -1;
+  hover = -1; hoverBtn = -1; hoverPerk = -1; hoverWild = -1; hoverWBtn = -1;
+  if (selWild >= 0 && (!canEditWilds() || !run.wilds[selWild])) selWild = -1;
   if (m.inside) {
+    wbtns.forEach((b, i) => { if (UI.hitBox(b, m.x, m.y)) hoverWBtn = i; });
+    if (!isOverlay() && hoverWBtn < 0)
+      run.wilds.forEach((w, i) => {
+        const x = wildX(i);
+        if (m.x >= x && m.x < x + WW && m.y >= WY - 2 && m.y < WY + WH) hoverWild = i;
+      });
     if (mode === 'ready')
       for (let i = 0; i < N; i++) {
         const x = slotX(i);
-        if (m.x >= x && m.x < x + SLOT && m.y >= SY - 30 && m.y < SY + SLOT + 12) hover = i;
+        if (m.x >= x && m.x < x + SLOT && m.y >= SY - 2 && m.y < SY + SLOT + 12 && selWild < 0) hover = i;
       }
     btns.forEach((b, i) => { if (UI.hitBox(b, m.x, m.y)) hoverBtn = i; });
     run.perks.forEach((p, k) => {
@@ -348,7 +400,9 @@ function update(dt) {
   if (hover !== prevHover && hover >= 0) SFX.hover();
   if (hoverBtn !== prevHoverBtn && hoverBtn >= 0) SFX.hover();
   if (hoverPerk !== prevHoverPerk && hoverPerk >= 0) SFX.hover();
-  prevHover = hover; prevHoverBtn = hoverBtn; prevHoverPerk = hoverPerk;
+  if (hoverWild !== prevHoverWild && hoverWild >= 0) SFX.hover();
+  if (hoverWBtn !== prevHoverWBtn && hoverWBtn >= 0) SFX.hover();
+  prevHover = hover; prevHoverBtn = hoverBtn; prevHoverPerk = hoverPerk; prevHoverWild = hoverWild; prevHoverWBtn = hoverWBtn;
 
   if (mode === 'intro' && modeT >= INTRO && enterT > 1) setMode('ready');
   if (auto && mode === 'ready') rollAll();
@@ -509,6 +563,82 @@ function drawPerkTip() {
 }
 
 // ------------------------------------------------------------
+//  render: wildcard row (top of the felt) + its tooltip / sell-move panel
+// ------------------------------------------------------------
+function drawWildRow() {
+  const { rect, rrect, text, ctx, T } = G;
+  for (let i = 0; i < WILD_SLOTS; i++) {
+    const x = wildX(i), w = run.wilds[i];
+    if (!w) {
+      ctx.globalAlpha = 0.5;
+      for (let k = 0; k < WW; k += 4) { rect(x + k, WY, 2, 1, '#2f8f5f'); rect(x + k, WY + WH - 1, 2, 1, '#2f8f5f'); }
+      for (let k = 0; k < WH; k += 4) { rect(x, WY + k, 1, 2, '#2f8f5f'); rect(x + WW - 1, WY + k, 1, 2, '#2f8f5f'); }
+      ctx.globalAlpha = 1;
+      continue;
+    }
+    const pop = badgePop.get(w.uid) || 0;
+    const y = WY - Math.round(pop * 4) - (hoverWild === i || selWild === i ? 2 : 0);
+    const col = RARITY.col[w.rarity];
+    rrect(x - 1, y - 1, WW + 2, WH + 2, PAL.ink);
+    rrect(x, y, WW, WH, pop > 0.3 ? PAL.white : col);
+    rect(x + 1, y + 1, WW - 2, WH - 2, '#15112c');
+    const art = CARD_ART[w.id];
+    if (art) ctx.drawImage(art, x + Math.floor((WW - art.width) / 2), y + Math.floor((WH - art.height) / 2));
+    else text(WILD_DEFS[w.id].code, x + WW / 2, y + WH / 2 - 3, col, { align: 'center' });
+    // live counters on the card
+    let tag = '';
+    if (w.id === 'glitch') tag = 'W' + w.state.face;
+    else if (w.id === 'keylogger' && w.state.x > 1) tag = 'X' + fmtMult(w.state.x);
+    else if (w.id === 'cookiejar' && w.state.chips) tag = '+' + w.state.chips;
+    else if (w.id === 'phantom' && run.phantom && mode !== 'ready' && mode !== 'intro') tag = String(run.phantom);
+    if (tag) text(tag, x + WW - 2, y + WH - 8, PAL.white, { align: 'right', outline: PAL.ink });
+    if (w.edition) UI.editionFx(w.edition, x, y, WW, WH);
+    if (selWild === i) drawBrackets(x, y, WW, WH, PAL.green, 2 + Math.round(Math.abs(Math.sin(T * 8))));
+  }
+}
+
+function drawWildPanel() {
+  wbtns = [];
+  const k = selWild >= 0 ? selWild : hoverWild;
+  if (k < 0 || !run.wilds[k]) return;
+  const w = run.wilds[k], col = RARITY.col[w.rarity];
+  const tag = (w.edition ? EDITIONS[w.edition].name + ' ' : '') + RARITY.name[w.rarity];
+  const tagCol = w.edition ? EDITIONS[w.edition].col : col;
+  const lines = wrapText(itemDesc(w), Math.floor((TW - 16) / 6));
+  if (selWild < 0) {
+    if (canEditWilds()) lines.push('CLICK TO SELL OR MOVE');
+    UI.infoBox(TX + 4, 168 - 14 - lines.length * 9 - 4, TW - 8, 14 + lines.length * 9 + 4, itemName(w), col, tag, tagCol, lines, PAL.white);
+    return;
+  }
+  const show = lines.slice(0, 3);
+  const h = 14 + show.length * 9 + 24, y = 168 - h;
+  UI.infoBox(TX + 4, y, TW - 8, h, itemName(w), col, tag, tagCol, show, PAL.white);
+  const by = y + h - 19;
+  wbtns.push({ x: TX + 10, y: by, w: 56, h: 13, label: '< MOVE', act: () => moveWild(-1), ...UI.BTN.blue, disabled: k === 0 });
+  wbtns.push({ x: TX + 70, y: by, w: 56, h: 13, label: 'MOVE >', act: () => moveWild(1), ...UI.BTN.blue, disabled: k === run.wilds.length - 1 });
+  wbtns.push({ x: TX + TW - 82, y: by, w: 72, h: 13, label: 'SELL +$' + wildSell(w), act: sellWild, ...UI.BTN.red });
+  wbtns.forEach((b, i) => UI.button(b, hoverWBtn === i));
+}
+
+function moveWild(dir) {
+  const k = selWild, j = k + dir;
+  if (j < 0 || j >= run.wilds.length) return;
+  [run.wilds[k], run.wilds[j]] = [run.wilds[j], run.wilds[k]];
+  selWild = j;
+  SFX.select();
+  saveRun('round');
+}
+function sellWild() {
+  const w = run.wilds[selWild];
+  if (!w) return;
+  run.money += wildSell(w);
+  wildFloat(w, '+$' + wildSell(w), PAL.gold);
+  removeWild(w);
+  SFX.coin(); G.glitch(0.1);
+  saveRun('round');
+}
+
+// ------------------------------------------------------------
 //  render: table
 // ------------------------------------------------------------
 function drawTable() {
@@ -581,7 +711,7 @@ function drawDie(i, off) {
     const glow = tinted(img, result.col);
     for (const [ox, oy] of [[-2, 0], [2, 0], [0, -2], [0, 2]]) drawSq(glow, cx + ox, base - bob + oy, 2, sx, sy, 0.8);
   }
-  drawSq(img, cx, base - d.h - bob, 2, sx, sy);
+  drawSq(img, cx, base - d.h - bob, 2, sx, sy, d.dropped && d.phase === 'idle' ? 0.3 : 1);
 }
 
 function drawResult() {
@@ -715,6 +845,7 @@ function render() {
   }
 
   drawTable();
+  drawWildRow();
   for (let i = 0; i < N; i++) {
     const p = slotDrop(i);
     if (p > 0) drawSlot(i, Math.round((1 - G.easeOutBack(p)) * -140));
@@ -728,12 +859,13 @@ function render() {
   drawIntro();
   drawPerkStrip();
   drawPerkTip();
+  if (!isOverlay()) drawWildPanel(); else wbtns = [];
   drawOverlay();
   drawSidebar();
   drawHUD();
   drawFloats();
 
-  if (mode === 'ready' && hoverPerk < 0 && Math.floor(T * 2) % 2 === 0)
+  if (mode === 'ready' && hoverPerk < 0 && hoverWild < 0 && selWild < 0 && Math.floor(T * 2) % 2 === 0)
     text(run.rollsLeft === 1 ? 'LAST ROLL!' : run.rollsRound === 0 ? 'CLICK ANY DIE TO ROLL' : 'ROLL AGAIN',
       CX, 153, run.rollsLeft === 1 ? PAL.red : PAL.gold, { align: 'center', shadow: PAL.ink });
 
@@ -747,6 +879,9 @@ function onPointer() {
   if (menuHover) { SFX.select(); G.goTo('menu'); return; }
   if (mode === 'shop') { SHOP.onPointer(); return; }
   if (hoverBtn >= 0 && btns[hoverBtn]) { btns[hoverBtn].act(); return; }
+  if (hoverWBtn >= 0 && wbtns[hoverWBtn]) { const b = wbtns[hoverWBtn]; if (b.disabled) SFX.deny(); else b.act(); return; }
+  if (hoverWild >= 0 && canEditWilds()) { selWild = selWild === hoverWild ? -1 : hoverWild; SFX.select(); return; }
+  if (selWild >= 0) { selWild = -1; return; }
   if (mode === 'intro' && enterT > 1) { setMode('ready'); return; }
   if (hover >= 0) rollAll();
 }
@@ -754,11 +889,12 @@ function onKey(k) {
   if (k === 'escape' || k === 'backspace') { SFX.select(); G.goTo('menu'); return; }
   if (mode === 'shop') { SHOP.onKey(k); return; }
   if (k !== ' ' && k !== 'enter') return;
+  selWild = -1;
   if (isOverlay()) { if (btns[0]) btns[0].act(); return; }
   if (mode === 'intro' && enterT > 1) { setMode('ready'); return; }
   rollAll();
 }
-const hot = () => menuHover || (mode === 'shop' ? SHOP.hot() : hover >= 0 || hoverBtn >= 0 || hoverPerk >= 0);
+const hot = () => menuHover || (mode === 'shop' ? SHOP.hot() : hover >= 0 || hoverBtn >= 0 || hoverPerk >= 0 || hoverWild >= 0 || hoverWBtn >= 0);
 
 return {
   enter, update, render, onPointer, onKey, hot, rollAll,

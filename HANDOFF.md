@@ -27,7 +27,7 @@ Controls: mouse, or **Space** = roll · **Esc** = back to menu · **M** = mute a
 | Pixel-art icons for every patch + perk card (`js/cardart.js`, preview in `art-gallery.html`) | Done |
 | Autosave + CONTINUE on the menu; crash guard keeps the game running after an error | Done |
 | Decluttered table (no slot labels under dice, no HOUSE OF BONES / TABLE text) | Done |
-| Wildcards (20 joker-style cards, limited slots, selling) | **Next** |
+| Wildcards: all 19 from DESIGN.md §6, 5 slots on the felt, sell/move, editions, Wildcard Drop pack, slots-full swap in shop | Done |
 | Boss firewalls (rounds 4 and 8 with rule twists) | Planned |
 | Exploits, upgradable dice, starting rigs, Dealer reactions | Planned |
 | Extra hand types (Small Straight, Parity, Bookends) | Needs precedence rules first |
@@ -72,6 +72,8 @@ Append to `index.html`:
 - `&ff=5` — fast-forward 5 seconds of game time (for screenshots); shows `FF OK` / the error in the top bar
 - `&clicks=x,y;x,y` — simulate clicks at game coordinates after fast-forwarding
 
+- `&wilds=dealer,mirror,botnet` — start with those wildcards (`&wilds=3` = 3 random); `&ed=holo` forces an edition
+
 Example: `index.html?play&perks=14&auto&ff=60`
 
 ## Decisions made without the user (worth confirming)
@@ -80,13 +82,18 @@ Example: `index.html?play&perks=14&auto&ff=60`
 - All card values are visible before you pick (the user asked for no hidden stats). Exceptions that are part of a perk's design: Lucky Number's target below Legendary, Corrupted Streak's face, Corrupted patches' lowered hand.
 - No keyboard shortcut leaves the shop (so mashing Space can't skip it).
 - Balance: with no build, runs die around firewall 3–4 — intentional.
+- Wildcards (design said 20, the table lists 19 — built the 19). Prices $4–9 by rarity, editions add $2–3.
+  Editions: NEON +20 chips, HOLO +6 mult, GOLD +$2 per breach, CORRUPTED X2 on half the rolls.
+  Order of scoring: dice → perks → wildcards left to right (each with its edition). MIRROR copies only the
+  scoring of the card to its right (not rule changes like Rubber Ducky). PHANTOM can't make straights.
+  ZERO DAY ignores Bust. COOKIE JAR counts this roll's 1s immediately.
 
 ## Next steps
 
-1. **Wildcards** — 20 cards in DESIGN.md §6, 5 slots, sell for 50%, order matters (Mirror),
-   editions (Neon/Gold/Holo/Corrupted). Add the Wildcard Drop pack and add wildcards to Mystery Payload.
-2. **Boss firewalls** on rounds 4 and 8.
-3. Playtest the sound/music levels and the overall balance.
+1. **Boss firewalls** on rounds 4 and 8.
+2. Playtest the sound/music levels and the overall balance (wildcards make runs much stronger — targets may need a bump).
+3. Wildcard follow-ups: drag-to-reorder (now click → MOVE buttons), wildcard sell from inside the shop
+   (now only via the slots-full prompt), more than 5 slots as a reward.
 
 ## Git
 

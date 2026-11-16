@@ -53,6 +53,35 @@ function rarityPips(r, cx, y) {
   }
 }
 
+/** Edition shimmer drawn over a wildcard: NEON glow, HOLO rainbow sweep, GOLD rim, CORRUPTED flicker. */
+function editionFx(ed, x, y, w, h) {
+  const { rect, ctx, T } = G;
+  ctx.save();
+  if (ed === 'neon') {
+    ctx.globalAlpha = 0.45 + Math.sin(T * 6) * 0.25;
+    rect(x - 2, y - 2, w + 4, 1, PAL.cyan); rect(x - 2, y + h + 1, w + 4, 1, PAL.cyan);
+    rect(x - 2, y - 2, 1, h + 4, PAL.cyan); rect(x + w + 1, y - 2, 1, h + 4, PAL.cyan);
+  } else if (ed === 'holo') {
+    ctx.beginPath(); ctx.rect(x + 1, y + 1, w - 2, h - 2); ctx.clip();
+    const cols = ['#ff6b75', '#feae34', '#4dff88', '#2ce8f5', '#c27bff'];
+    ctx.globalAlpha = 0.18;
+    const off = (T * 30) % 40;
+    for (let k = -h; k < w + 40; k += 2) rect(x + k + off - 40, y, 2, h, cols[((k / 2) % cols.length + cols.length) % cols.length]);
+  } else if (ed === 'gold') {
+    ctx.globalAlpha = 0.6 + Math.sin(T * 4) * 0.3;
+    rect(x, y, w, 1, PAL.gold); rect(x, y + h - 1, w, 1, PAL.gold); rect(x, y, 1, h, PAL.gold); rect(x + w - 1, y, 1, h, PAL.gold);
+    const sx = x + ((T * 40) % (w + 20)) - 10;
+    ctx.globalAlpha = 0.5; rect(sx, y + 1, 2, h - 2, '#fff4c2');
+  } else if (ed === 'corrupt') {
+    if (Math.random() < 0.12) {
+      ctx.globalAlpha = 0.5;
+      const yy = y + Math.floor(Math.random() * h);
+      rect(x - 2, yy, w + 4, 2, Math.random() < 0.5 ? PAL.magenta : PAL.cyan);
+    }
+  }
+  ctx.restore();
+}
+
 function itemCard(it, x, y, w, h, o = {}) {
   const { rect, rrect, text, ctx, T } = G;
   const r = it.rarity, col = RARITY.col[r];
@@ -78,7 +107,7 @@ function itemCard(it, x, y, w, h, o = {}) {
   rrect(x, y, w, h, col);
   rect(x + 1, y + 1, w - 2, h - 2, '#15112c');
   rect(x + 1, y + 1, w - 2, 9, col);
-  text(it.kind === 'perk' ? 'PERK' : 'PATCH', x + w / 2, y + 2, PAL.ink, { align: 'center' });
+  text(it.kind === 'perk' ? 'PERK' : it.kind === 'wild' ? 'WILD' : 'PATCH', x + w / 2, y + 2, PAL.ink, { align: 'center' });
 
   const code = itemCode(it);
   const jit = r === 5 && Math.random() < 0.15 ? (Math.random() < 0.5 ? -2 : 2) : 0;
@@ -93,8 +122,10 @@ function itemCard(it, x, y, w, h, o = {}) {
   }
 
   const ty = art ? y + h - 17 : y + h / 2 + 9;
-  if (it.kind === 'patch') text('+' + PATCH_BOOST[r].lv + ' LV', x + w / 2, ty, PAL.white, { align: 'center' });
-  else text(it.revealed ? 'OK' : perkShort(it), x + w / 2, ty, it.revealed ? PAL.green : PAL.white, { align: 'center' });
+  const short = itemShort(it);
+  const sc = it.kind === 'wild' ? (it.edition ? EDITIONS[it.edition].col : PAL.white) : it.revealed ? PAL.green : PAL.white;
+  if (short) text(short, x + w / 2, ty, sc, { align: 'center' });
+  if (it.edition) editionFx(it.edition, x, y, w, h);
   rarityPips(r, x + w / 2, y + h - 7);
 
   // legendary shine sweep
@@ -180,5 +211,5 @@ function infoBox(x, y, w, h, title, titleCol, tag, tagCol, body, bodyCol) {
   lines.slice(0, Math.floor((h - 14) / 9)).forEach((l, i) => text(l, x + 4, y + 14 + i * 9, bodyCol || PAL.white));
 }
 
-return { BTN, panel, boxNum, button, hitBox, itemCard, packArt, priceTag, infoBox, rarityPips };
+return { BTN, panel, boxNum, button, hitBox, itemCard, packArt, priceTag, infoBox, rarityPips, editionFx };
 })();

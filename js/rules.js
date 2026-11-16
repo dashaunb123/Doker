@@ -30,7 +30,7 @@ function handValue(key, level = 1) {
 }
 
 /** Which hand five dice make, and which dice are part of it. */
-function evaluateDice(faces) {
+function evaluateDice(faces, opts = {}) {
   const cnt = {};
   faces.forEach(f => (cnt[f] = (cnt[f] || 0) + 1));
   const groups = Object.entries(cnt).map(([f, c]) => ({ f: +f, c })).sort((a, b) => b.c - a.c || b.f - a.f);
@@ -42,7 +42,8 @@ function evaluateDice(faces) {
   let key, scoring;
   if (a.c === 5)                                     { key = 'doker';    scoring = all; }
   else if (a.c === 4)                                { key = 'four';     scoring = mark([a.f]); }
-  else if (sorted === '12345' || sorted === '23456') { key = 'straight'; scoring = all; }
+  else if (sorted === '12345' || sorted === '23456' || (opts.spoof && faces.length === 5 && a.c === 1))
+                                                     { key = 'straight'; scoring = all; }
   else if (a.c === 3 && b && b.c === 2)              { key = 'full';     scoring = all; }
   else if (a.c === 3)                                { key = 'three';    scoring = mark([a.f]); }
   else if (a.c === 2 && b && b.c === 2)              { key = 'twopair';  scoring = mark([a.f, b.f]); }

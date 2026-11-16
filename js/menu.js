@@ -774,6 +774,12 @@ function update(dt) {
       state = 'play'; PLAY.enter();
       // dev-only test hooks: ?play&auto  ?play&perks=6  ?play&shop  ?play&pack=megaperk
       if (params.has('perks')) rollItems(+params.get('perks') || 5, ['perk'], 3).forEach(it => applyItem(PLAY.run, it));
+      // ?wilds=dealer,mirror,botnet  (or ?wilds=3 for random ones); &ed=holo forces an edition
+      if (params.has('wilds')) {
+        const v = params.get('wilds') || '3';
+        const ids = /^\d+$/.test(v) ? WILD_IDS.slice().sort(() => Math.random() - 0.5).slice(0, +v) : v.split(',');
+        ids.slice(0, WILD_SLOTS).forEach(id => applyItem(PLAY.run, makeWild(id, params.get('ed') || undefined)));
+      }
       if (params.has('shop') || params.has('pack')) { PLAY.run.money = 40; PLAY.debugShop(); }
       if (params.has('pack')) SHOP.debugOpen(params.get('pack') || 'perk');
       if (params.has('auto')) PLAY.auto = true;

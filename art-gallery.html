@@ -29,13 +29,16 @@
 <body>
 <header>
   <h1>DOKER // CARD ART</h1>
-  <p>Every patch and perk icon. Big view on top; below it, the card as it looks in game (scaled 3×). Switch rarity to see the card colours.</p>
+  <p>Every patch, perk and wildcard icon. Big view on top; below it, the card as it looks in game (scaled 3×). Switch rarity to see the card colours.</p>
   <div class="bar" id="rar"></div>
 </header>
 <h2>PATCHES (HAND UPGRADES)</h2>
 <div class="grid" id="patches"></div>
 <h2>PERKS</h2>
 <div class="grid" id="perks"></div>
+<h2>WILDCARDS</h2>
+<div class="bar" id="eds" style="max-width:1200px;margin:0 auto 10px;padding:0 16px"></div>
+<div class="grid" id="wilds"></div>
 
 <script src="js/font.js"></script>
 <script src="js/sprites.js"></script>
@@ -44,7 +47,7 @@
 <script src="js/items.js"></script>
 <script>
 'use strict';
-let rarity = 2;
+let rarity = 2, edition = null;
 
 function bigCanvas(img) {
   const Z = 6, c = document.createElement('canvas');
@@ -63,12 +66,13 @@ function cardCanvas(it) {
   t.fillStyle = col; t.fillRect(1, 0, W - 2, H); t.fillRect(0, 1, W, H - 2);
   t.fillStyle = '#15112c'; t.fillRect(1, 1, W - 2, H - 2);
   t.fillStyle = col; t.fillRect(1, 1, W - 2, 9);
-  drawText(t, it.kind === 'perk' ? 'PERK' : 'PATCH', W / 2, 2, PAL.ink, { align: 'center' });
+  drawText(t, it.kind === 'perk' ? 'PERK' : it.kind === 'wild' ? 'WILD' : 'PATCH', W / 2, 2, PAL.ink, { align: 'center' });
   const art = CARD_ART[it.kind === 'patch' ? it.key : it.id];
   if (art) t.drawImage(art, Math.round((W - art.width) / 2), 11 + Math.max(0, Math.floor((H - 27 - art.height) / 2)));
   else drawText(t, itemCode(it), W / 2, H / 2 - 8, col, { align: 'center', scale: 2 });
-  const label = it.kind === 'patch' ? '+' + PATCH_BOOST[it.rarity].lv + ' LV' : perkShort(it);
-  drawText(t, label, W / 2, art ? H - 17 : H / 2 + 9, PAL.white, { align: 'center' });
+  const label = itemShort(it);
+  if (label) drawText(t, label, W / 2, art ? H - 17 : H / 2 + 9, it.edition ? EDITIONS[it.edition].col : PAL.white, { align: 'center' });
+  if (it.edition) { t.fillStyle = EDITIONS[it.edition].col; t.fillRect(0, 0, W, 1); t.fillRect(0, H - 1, W, 1); t.fillRect(0, 0, 1, H); t.fillRect(W - 1, 0, 1, H); }
   const n = it.rarity === 5 ? 5 : it.rarity + 1, tw = n * 5 - 2;
   for (let k = 0; k < n; k++) { t.fillStyle = it.rarity === 5 ? PAL.magenta : col; t.fillRect(Math.round(W / 2 - tw / 2) + k * 5, H - 7, 3, 3); }
   const c = document.createElement('canvas'); c.width = W * S; c.height = H * S;
@@ -97,6 +101,11 @@ function render() {
     const it = makePatch(key, rarity);
     P.appendChild(tile(it, HANDS[key].proto + ' PATCH', HANDS[key].name + ' // ' + PATCH_CODE[key], itemDesc(it, true)));
   }
+  const Wd = document.getElementById('wilds'); Wd.innerHTML = '';
+  for (const id of WILD_IDS) {
+    const it = makeWild(id, edition);
+    Wd.appendChild(tile(it, WILD_DEFS[id].name, RARITY.name[it.rarity] + ' // $' + itemPrice(it) + ' // ' + WILD_DEFS[id].code, itemDesc(it, true)));
+  }
   for (const id of PERK_IDS) {
     const it = makePerk(id, rarity);
     K.appendChild(tile(it, PERK_DEFS[id].name, RARITY.name[rarity] + ' // ' + PERK_DEFS[id].code, itemDesc(it, true)));
@@ -109,6 +118,14 @@ RARITY.name.forEach((n, r) => {
   b.onclick = () => { rarity = r; [...bar.children].forEach((x, i) => x.classList.toggle('on', i === r)); render(); };
   if (r === rarity) b.classList.add('on');
   bar.appendChild(b);
+});
+const eds = document.getElementById('eds');
+[null, ...Object.keys(EDITIONS)].forEach(e => {
+  const b = document.createElement('button'); b.textContent = e ? EDITIONS[e].name : 'NO EDITION';
+  if (e) b.style.color = EDITIONS[e].col;
+  b.onclick = () => { edition = e; [...eds.children].forEach(x => x.classList.toggle('on', x === b)); render(); };
+  if (e === edition) b.classList.add('on');
+  eds.appendChild(b);
 });
 render();
 </script>

@@ -27,6 +27,7 @@ let quote = '', quoteT = 0, typed = 0;
 let reveal = null;          // { item, t, done, doneT }
 let faceFor = null;         // LOADED (legendary) waiting for the player to choose a face
 let pack = null;            // open pack
+let swap = null;            // { item, done } — wildcard slots are full: pick one to sell first
 let shakeSlot = -1, shakeT = 0, blinkT = 0, nextBlink = 2;
 
 const money = () => run.money;
@@ -34,13 +35,13 @@ const money = () => run.money;
 /** snap = a saved shop (from snapshot()) to restore instead of rolling fresh stock. */
 function enter(r, cb, saveCb, snap) {
   run = r; onDone = cb; onSave = saveCb || null; t = 0;
-  reveal = null; faceFor = null; pack = null;
+  reveal = null; faceFor = null; pack = null; swap = null;
   if (snap) {
     items = snap.items; packs = snap.packs; rerollCost = snap.rerollCost;
     if (snap.pack) pack = { ...snap.pack, def: PACKS[snap.pack.type], t: 99, shown: snap.pack.items.length, flash: [] };
     if (snap.faceFor) faceFor = run.perks.find(p => p.uid === snap.faceFor) || null;
   } else {
-    items = rollItems(2, ['perk', 'patch']);
+    items = rollItems(2, ['perk', 'patch', 'wild']);
     packs = [rollPackType(), rollPackType()].map(type => ({ type, sold: false }));
     rerollCost = 2;
   }
@@ -63,11 +64,26 @@ function say(s) { quote = s; quoteT = 0; typed = 0; SFX.talk(); }
 // ------------------------------------------------------------
 function broke(i) { say(G.pick(BROKE)); SFX.deny(); shakeSlot = i; shakeT = 0.3; }
 
+const slotsFull = it => it.kind === 'wild' && (run.wilds || []).length >= WILD_SLOTS;
+function askSwap(it, done) { swap = { item: it, done }; say('NO ROOM. SELL ONE?'); SFX.deny(); }
+function swapSell(k) {
+  const w = run.wilds[k];
+  if (!w) return;
+  run.money += wildSell(w);
+  run.wilds.splice(k, 1);
+  SFX.coin();
+  const done = swap.done;
+  swap = null;
+  done();
+  save();
+}
+
 function buy(i) {
   if (i < 2) {
     const it = items[i];
     if (!it) return;
     if (money() < itemPrice(it)) return broke(i);
+    if (slotsFull(it)) return askSwap(it, () => buy(i));
     run.money -= itemPrice(it);
     items[i] = null;
     SFX.buy();
@@ -90,7 +106,7 @@ function reroll() {
   if (money() < rerollCost) return broke(-1);
   run.money -= rerollCost;
   rerollCost++;
-  items = rollItems(2, ['perk', 'patch']);
+  items = rollItems(2, ['perk', 'patch', 'wild']);
   reveal = null;
   SFX.rollStart(); G.glitch(0.1);
   say('NEW STOCK. SAME PRICES.');
@@ -132,6 +148,23 @@ function openPack(type) {
   SFX.packOpen(); G.glitch(0.25); G.shake(2);
 }
 
+function swapCardX(i) {
+  const n = run.wilds.length, gap = 10, total = n * PCW + (n - 1) * gap;
+  return Math.round(RX + (RW - total) / 2 + i * (PCW + gap));
+}
+
+function drawSwap() {
+  const { rect, text, ctx } = G;
+  ctx.globalAlpha = 0.95; rect(RX - 3, 20, RW + 6, 181, '#08061a'); ctx.globalAlpha = 1;
+  text('SLOTS FULL', RCX, 24, PAL.white, { align: 'center', scale: 2, outline: PAL.ink });
+  text('SELL A WILDCARD TO MAKE ROOM FOR ' + itemName(swap.item), RCX, 44, PAL.green, { align: 'center' });
+  run.wilds.forEach((w, i) => {
+    const x = swapCardX(i), on = hover === i;
+    UI.itemCard(w, x, PCY + (on ? -3 : 0), PCW, PCH, { hover: on });
+    UI.priceTag(wildSell(w), x + PCW / 2, PCY + PCH + 3, true);
+  });
+}
+
 function packCardX(i) {
   const n = pack.items.length;
   const gap = Math.min(12, Math.floor((260 - n * PCW) / Math.max(1, n - 1)));
@@ -141,6 +174,7 @@ function packCardX(i) {
 
 function pickFromPack(i) {
   if (pack.picks <= 0 || pack.picked.includes(i)) return;
+  if (slotsFull(pack.items[i])) return askSwap(pack.items[i], () => pickFromPack(i));
   pack.picked.push(i);
   pack.picks--;
   startReveal(pack.items[i]);
@@ -193,7 +227,12 @@ function update(dt) {
   if (m.inside) {
     btns.forEach((b, i) => { if (UI.hitBox(b, m.x, m.y)) hoverBtn = i; });
     if (hoverBtn < 0) {
-      if (pack) {
+      if (swap) {
+        run.wilds.forEach((_, i) => {
+          const x = swapCardX(i);
+          if (m.x >= x && m.x < x + PCW && m.y >= PCY - 6 && m.y < PCY + PCH) hover = i;
+        });
+      } else if (pack) {
         if (pack.shown >= pack.items.length)
           pack.items.forEach((_, i) => {
             const x = packCardX(i);
@@ -288,7 +327,12 @@ function scrambled(str) {
 }
 
 function drawInfo() {
-  const hovered = pack ? (hover >= 0 ? pack.items[hover] : null) : (hover >= 0 && hover < 2 ? items[hover] : null);
+  const hovered = swap ? (hover >= 0 ? run.wilds[hover] : null)
+    : pack ? (hover >= 0 ? pack.items[hover] : null) : (hover >= 0 && hover < 2 ? items[hover] : null);
+  if (swap && !hovered) {
+    UI.infoBox(IX, IY, IW, IH, itemName(swap.item), RARITY.col[swap.item.rarity], 'INCOMING', PAL.green, itemDesc(swap.item, true, run), PAL.white);
+    return;
+  }
 
   if (faceFor) {
     UI.infoBox(IX, IY, IW, IH, 'LOADED: CHOOSE YOUR FACE', RARITY.col[4], '', '', []);
@@ -326,7 +370,7 @@ function drawInfo() {
     return;
   }
   const perks = run.perks.length;
-  UI.infoBox(IX, IY, IW, IH, 'THE DEALER', PAL.green, perks + ' PERK' + (perks === 1 ? '' : 'S') + ' OWNED', '#8a7fc0',
+  UI.infoBox(IX, IY, IW, IH, 'THE DEALER', PAL.green, perks + ' PERK' + (perks === 1 ? '' : 'S') + ' // ' + (run.wilds || []).length + '/' + WILD_SLOTS + ' WILD', '#8a7fc0',
     'HOVER TO INSPECT. CLICK TO BUY.', '#a99be0');
 }
 
@@ -354,6 +398,10 @@ function drawPack() {
 
 function buildButtons() {
   btns = [];
+  if (swap) {
+    btns.push({ x: 292, y: 182, w: 84, h: 13, label: 'CANCEL', act: () => { SFX.select(); swap = null; say('SUIT YOURSELF.'); }, ...UI.BTN.blue });
+    return;
+  }
   if (faceFor) {
     for (let f = 1; f <= 6; f++)
       btns.push({ face: f, x: IX + 8 + (f - 1) * 30, y: IY + 15, w: 24, h: 18, act: () => chooseFace(f) });
@@ -374,6 +422,7 @@ function render() {
   drawRoom();
   if (pack) drawPack();
   else { drawDealer(); drawShopFloor(); }
+  if (swap) drawSwap();
   drawInfo();
   buildButtons();
   btns.forEach((b, i) => {
@@ -392,6 +441,7 @@ function render() {
 function onPointer() {
   if (hoverBtn >= 0) { const b = btns[hoverBtn]; if (b.disabled) return broke(-1); return b.act(); }
   if (faceFor) return;
+  if (swap) { if (hover >= 0) swapSell(hover); return; }
   if (reveal && !reveal.done) return;
   if (pack) { if (hover >= 0 && pack.shown >= pack.items.length) pickFromPack(hover); return; }
   if (hover >= 0) buy(hover);
