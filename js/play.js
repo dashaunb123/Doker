@@ -1,0 +1,742 @@
+// ============================================================
+//  DOKER — THE TABLE (a run: 8 firewalls, Black Market between)
+//  Sidebar = run info + chips x mult. Felt = 5 dice slots.
+//  Perk strip under the felt. Uses window.G, UI, SHOP, items.js.
+// ============================================================
+const PLAY = (() => {
+'use strict';
+
+// ---------- layout ----------
+const N = 5, SLOT = 44, GAP = 9;
+const TX = 106, TY = 22, TW = 272, TH = 146;          // felt table
+const CX = TX + TW / 2;
+const SX0 = TX + Math.floor((TW - (N * SLOT + (N - 1) * GAP)) / 2);
+const SY = 58;
+const REST = SY + 38;
+const SBX = 4, SBW = 96;                              // sidebar
+const OX = TX + 20, OW = TW - 40, OY = 34, OH = 124;  // overlay panel
+const PSX = TX, PSY = 174, BADGE_W = 24, BADGE_H = 11, BADGE_GAP = 3, BADGES_PER_ROW = 10;
+const CHIPS_BOX = { x: SBX + 4 + 19, y: 120 }, MULT_BOX = { x: SBX + SBW - 4 - 19, y: 120 };
+
+// ---------- timings ----------
+const AIR = 0.62, SETTLE = 0.42, STAGGER = 0.2, FLIPS = 5, INTRO = 1.5;
+
+const TABLE_RAMP = [[4,10,12],[8,16,22],[12,24,32],[18,30,46],[26,36,60],[34,44,74],[44,54,90]];
+const TICK = '*** BREACH ALL 8 FIREWALLS *** SCORE = (HAND CHIPS + DICE) X MULT *** PERKS TRIGGER AFTER THE DICE *** HOVER A PERK BELOW THE TABLE TO READ IT *** SPACE = ROLL   ESC = MENU   M = MUTE   N = MUSIC *** ';
+const HEX = '0123456789ABCDEF';
+
+// ---------- state ----------
+let run = null;
+let mode = 'intro';        // intro | ready | rolling | scoring | cleared | failed | won | shop
+let modeT = 0, enterT = 0, shownScore = 0;
+let dice = [], parts = [], rings = [], floats = [];
+let result = null, cur = null;
+let seq = [], seqT = 0;
+let reward = null;
+let btns = [], hoverBtn = -1, prevHoverBtn = -1;
+let hover = -1, prevHover = -1, menuHover = false, prevMenuHover = false;
+let hoverPerk = -1, prevHoverPerk = -1;
+const badgePop = new Map();
+let felt = null;
+let auto = false;
+
+const slotX = i => SX0 + i * (SLOT + GAP);
+const dieX = i => slotX(i) + SLOT / 2;
+const slotDrop = i => G.clamp((enterT - 0.15 - i * 0.07) / 0.45, 0, 1);
+const isOverlay = () => mode === 'cleared' || mode === 'failed' || mode === 'won';
+
+/** Schedule fn to run `t` seconds from now. */
+function at(t, fn) { seq.push({ t: seqT + t, fn }); }
+
+// ------------------------------------------------------------
+//  felt table art (built once)
+// ------------------------------------------------------------
+function buildFelt() {
+  const [c, g] = newCanvas(TW, TH);
+  const ramp = ['#07231a', '#0b2f22', '#0f3b2a', '#134833', '#17543b'];
+  const B = [0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
+  for (let y = 0; y < TH; y++)
+    for (let x = 0; x < TW; x++) {
+      const u = (x - TW / 2) / (TW / 2), v = (y - TH / 2) / (TH / 2);
+      const r = Math.sqrt(u * u * 0.7 + v * v);
+      const f = G.clamp(1 - r * 0.7, 0, 0.999) * (ramp.length - 1);
+      let n = f | 0;
+      if (f - n > (B[(y & 3) * 4 + (x & 3)] + 0.5) / 16) n++;
+      g.fillStyle = ramp[Math.min(n, ramp.length - 1)];
+      g.fillRect(x, y, 1, 1);
+    }
+  let s = 1337;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const px = (x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); };
+  for (let k = 0; k < 14; k++) {
+    const left = rnd() < 0.5;
+    let x = left ? 0 : TW - 1, y = 6 + Math.floor(rnd() * (TH - 12));
+    const dir = left ? 1 : -1, dy = rnd() < 0.5 ? 1 : -1;
+    for (const [sx, sy, len] of [[dir, 0, 6 + rnd() * 22], [dir, dy, 4 + rnd() * 10], [dir, 0, 4 + rnd() * 14]])
+      for (let i = 0; i < len; i++) { px(x, y, '#1a5c40'); x += sx; y += sy; }
+    g.fillStyle = '#1a5c40'; g.fillRect(x - 1, y - 1, 3, 3);
+    px(x, y, '#2f8f5f');
+  }
+  drawText(g, '* HOUSE OF BONES *', TW / 2, 6, '#1d6444', { align: 'center' });
+  g.clearRect(0, 0, 1, 1); g.clearRect(TW - 1, 0, 1, 1); g.clearRect(0, TH - 1, 1, 1); g.clearRect(TW - 1, TH - 1, 1, 1);
+  return c;
+}
+
+// ------------------------------------------------------------
+//  run flow
+// ------------------------------------------------------------
+function enter() {
+  if (!felt) felt = buildFelt();
+  enterT = 0;
+  parts = []; rings = []; floats = [];
+  dice = Array.from({ length: N }, (_, i) => ({
+    face: i + 1, theme: 'bone', phase: 'idle', t: 0, delay: 0, final: 1, flipTo: 0, flips: 0,
+    h: 0, sq: 1, sx: 1, sy: 1, jx: 0, flash: 0, pop: 0, trail: [], scoring: false, label: '', entered: false,
+  }));
+  newRun();
+}
+
+function newRun() {
+  run = {
+    round: 0, target: 0, score: 0, rollsLeft: 0, rollsRound: 0, money: RULES.START_MONEY, rollsUsed: 0,
+    levels: {}, bonus: {}, perks: [], hot: 0, pity: 0, prevKey: null, hotShieldUsed: false,
+  };
+  startRound(1);
+}
+
+function startRound(r) {
+  run.round = r;
+  run.target = RULES.target(r);
+  run.score = 0; shownScore = 0;
+  onRoundStart(run);
+  run.rollsLeft = rollsPerRound(run);
+  run.rollsRound = 0;
+  result = null; cur = null; reward = null; seq = []; seqT = 0;
+  dice.forEach(d => (d.scoring = false));
+  setMode('intro');
+  if (r > 1) SFX.whoosh();
+}
+
+function setMode(m) { mode = m; modeT = 0; btns = []; hoverBtn = prevHoverBtn = -1; }
+
+function rollAll() {
+  if (mode !== 'ready') return;
+  run.rollsLeft--; run.rollsUsed++; run.rollsRound++;
+  result = null; cur = null;
+  setMode('rolling');
+  const w = dieWeights(run);
+  const finals = dice.map(() => rollFace(w));
+  const flips = bitFlips(run, finals);
+  dice.forEach((d, i) => Object.assign(d, {
+    phase: 'wait', t: 0, delay: i * STAGGER, final: finals[i], flipTo: flips[i] || 0, flips: 0, scoring: false,
+  }));
+  SFX.rollStart();
+  G.glitch(0.08);
+}
+
+// ------------------------------------------------------------
+//  scoring:  hand -> each die adds chips -> perks -> x mult -> score
+// ------------------------------------------------------------
+function popPerk(p) { badgePop.set(p.uid, 1); }
+
+function startScoring() {
+  const faces = dice.map(d => d.face);
+  const sc = scoreRoll(run, faces, { first: run.rollsRound === 1, last: run.rollsLeft === 0, prevKey: run.prevKey });
+  const h = HANDS[sc.key];
+  const lv = run.levels[sc.key] ?? 1;
+  result = { key: sc.key, name: h.name, col: h.col, tier: h.tier };
+  cur = { proto: h.proto, lv, col: h.col, chips: 0, mult: 0, total: 0, showTotal: false, cp: 0, mp: 0, tp: 0 };
+  dice.forEach((d, i) => (d.scoring = sc.scoring[i]));
+  setMode('scoring');
+
+  let t = 0;
+  at(t, () => {
+    cur.chips = sc.base.chips; cur.mult = sc.base.mult; cur.cp = 1; cur.mp = 1;
+    SFX.hand(h.tier);
+    if (h.tier >= 3) for (let i = 0; i < N; i++) if (dice[i].scoring) burst(i, 8, 1.4);
+    if (h.tier >= 5) { G.flash(0.25); G.shake(3); }
+    if (h.tier === 7) { G.glitch(0.7); G.flash(0.6); }
+  });
+  t += 0.55;
+  for (let i = 0; i < N; i++) {
+    at(t, () => {
+      const d = dice[i];
+      d.pop = 1;
+      cur.chips += d.face; cur.cp = 1;
+      floats.push({ x: dieX(i), y: SY - 8, txt: '+' + d.face, col: '#7d9bff', life: 0.9 });
+      SFX.chip(i);
+    });
+    t += 0.13;
+  }
+  // perk triggers, one at a time
+  sc.steps.forEach((s, k) => {
+    t += 0.12;
+    at(t, () => {
+      popPerk(s.p);
+      const bx = badgeXY(run.perks.indexOf(s.p));
+      floats.push({ x: bx.x + BADGE_W / 2, y: bx.y - 9, txt: PERK_DEFS[s.p.id].name, col: RARITY.col[s.p.rarity], life: 1.1 });
+      if (s.kind === 'chips') {
+        cur.chips += s.amt; cur.cp = 1;
+        floats.push({ x: CHIPS_BOX.x, y: CHIPS_BOX.y, txt: '+' + fmtNum(s.amt), col: '#7d9bff', life: 0.9 });
+        SFX.chip(5 + k);
+      } else if (s.kind === 'mult') {
+        cur.mult += s.amt; cur.mp = 1;
+        floats.push({ x: MULT_BOX.x, y: MULT_BOX.y, txt: '+' + fmtMult(s.amt), col: PAL.red, life: 0.9 });
+        SFX.multAdd();
+      } else {
+        cur.mult *= s.amt; cur.mp = 1;
+        floats.push({ x: MULT_BOX.x, y: MULT_BOX.y, txt: 'X' + fmtMult(s.amt), col: PAL.red, life: 1.0, big: true });
+        SFX.xmult(); G.shake(2);
+      }
+    });
+    t += 0.3;
+  });
+  t += 0.2;
+  at(t, () => {
+    cur.total = Math.round(cur.chips * cur.mult);
+    cur.showTotal = true; cur.tp = 1;
+    const power = cur.total / run.target;
+    SFX.multHit(power);
+    G.shake(Math.min(5, 1 + power * 5));
+  });
+  t += 0.75;
+  at(t, () => { run.score += cur.total; SFX.coin(); afterRoll(run, sc.key, faces); });
+  t += 0.6;
+  at(t, endRoll);
+}
+
+function endRoll() {
+  if (run.score >= run.target) breach();
+  else if (run.rollsLeft <= 0) fail();
+  else setMode('ready');
+}
+
+function breach() {
+  setMode('cleared');
+  const rows = [['BREACH REWARD', RULES.reward(run.round)]];
+  if (run.rollsLeft > 0) rows.push(['UNUSED ROLLS X' + run.rollsLeft, run.rollsLeft]);
+  const intr = interestFor(run);
+  if (intr > 0) rows.push(['COMPOUND INTEREST', intr]);
+  reward = { rows, total: rows.reduce((a, r) => a + r[1], 0), shown: 0 };
+  SFX.breach();
+  G.flash(0.35); G.glitch(0.25);
+  for (let i = 0; i < N; i++) burst(i, 14, 1.8);
+  rows.forEach((_, i) => at(0.45 + i * 0.3, () => { reward.shown = i + 1; SFX.coin(); }));
+  at(0.45 + rows.length * 0.3, () => { reward.shown = rows.length + 1; run.money += reward.total; SFX.select(); });
+}
+
+function fail() {
+  setMode('failed');
+  SFX.fail();
+  G.glitch(0.7); G.shake(5);
+}
+
+function nextFirewall() {
+  SFX.select();
+  if (run.round >= RULES.ROUNDS) { setMode('won'); SFX.hand(7); G.flash(0.7); G.glitch(0.5); return; }
+  setMode('shop');
+  G.glitch(0.3); SFX.whoosh();
+  SHOP.enter(run, () => { G.glitch(0.3); startRound(run.round + 1); });
+}
+
+// ------------------------------------------------------------
+//  update
+// ------------------------------------------------------------
+function burst(i, n, up) {
+  for (let k = 0; k < n; k++)
+    parts.push({
+      x: dieX(i) + G.rand(-14, 14), y: REST - 1,
+      vx: G.rand(-100, 100), vy: G.rand(-180, -40) * (up || 1),
+      life: G.rand(0.35, 0.8), col: G.pick([PAL.white, PAL.green, PAL.gold, PAL.mint]), s: Math.random() < 0.3 ? 2 : 1,
+    });
+}
+
+function land(d, i) {
+  Object.assign(d, { phase: 'land', t: 0, h: 0, trail: [], face: d.final, theme: 'bone', flash: 1, sq: 1, jx: 0 });
+  G.shake(1.5 + i * 0.5);
+  SFX.slam(i);
+  burst(i, 16);
+  rings.push({ x: dieX(i), y: SY + SLOT / 2, r: SLOT / 2, life: 1 });
+  if (d.flipTo) {
+    // BIT FLIP: the die glitches to its opposite face a moment after landing
+    at(0.2, () => {
+      d.face = d.flipTo; d.flipTo = 0; d.flash = 1; d.pop = 1;
+      floats.push({ x: dieX(i), y: SY - 8, txt: 'BIT FLIP', col: PAL.magenta, life: 1 });
+      perksOf(run, 'bitflip').forEach(popPerk);
+      SFX.glitch(); G.glitch(0.12);
+    });
+  }
+  if (i === N - 1) at(0.45, startScoring);
+}
+
+function badgeXY(k) {
+  const row = Math.floor(k / BADGES_PER_ROW), col = k % BADGES_PER_ROW;
+  return { x: PSX + col * (BADGE_W + BADGE_GAP), y: PSY + row * (BADGE_H + 3) };
+}
+
+function update(dt) {
+  enterT += dt; modeT += dt;
+  const m = G.mouse;
+
+  // ---- timed events (run even in the shop so nothing gets stuck) ----
+  if (seq.length) {
+    seqT += dt;
+    const due = seq.filter(e => e.t <= seqT);
+    seq = seq.filter(e => e.t > seqT);
+    due.forEach(e => e.fn());
+  } else seqT = 0;
+
+  menuHover = m.inside && m.x >= 3 && m.x < 50 && m.y >= 1 && m.y < 14;
+  if (menuHover && !prevMenuHover) SFX.hover();
+  prevMenuHover = menuHover;
+
+  if (mode === 'shop') { SHOP.update(dt); updateFx(dt); return; }
+
+  // ---- hover ----
+  hover = -1; hoverBtn = -1; hoverPerk = -1;
+  if (m.inside) {
+    if (mode === 'ready')
+      for (let i = 0; i < N; i++) {
+        const x = slotX(i);
+        if (m.x >= x && m.x < x + SLOT && m.y >= SY - 30 && m.y < SY + SLOT + 12) hover = i;
+      }
+    btns.forEach((b, i) => { if (UI.hitBox(b, m.x, m.y)) hoverBtn = i; });
+    run.perks.forEach((p, k) => {
+      const b = badgeXY(k);
+      if (k < BADGES_PER_ROW * 2 && m.x >= b.x && m.x < b.x + BADGE_W && m.y >= b.y && m.y < b.y + BADGE_H) hoverPerk = k;
+    });
+  }
+  if (hover !== prevHover && hover >= 0) SFX.hover();
+  if (hoverBtn !== prevHoverBtn && hoverBtn >= 0) SFX.hover();
+  if (hoverPerk !== prevHoverPerk && hoverPerk >= 0) SFX.hover();
+  prevHover = hover; prevHoverBtn = hoverBtn; prevHoverPerk = hoverPerk;
+
+  if (mode === 'intro' && modeT >= INTRO && enterT > 1) setMode('ready');
+  if (auto && mode === 'ready') rollAll();
+  if (auto && mode === 'cleared' && reward && reward.shown > reward.rows.length && modeT > 1.6) nextFirewall();
+
+  // ---- dice ----
+  for (let i = 0; i < N; i++) {
+    const d = dice[i];
+    if (!d.entered && slotDrop(i) >= 1) { d.entered = true; SFX.land(i); }
+    d.flash = Math.max(0, d.flash - dt * 3);
+    d.pop = Math.max(0, d.pop - dt * 4);
+
+    if (d.phase === 'wait') {
+      d.t += dt;
+      const c = G.clamp((d.t - (d.delay - 0.14)) / 0.14, 0, 1);
+      d.sy = 1 - 0.22 * c; d.sx = 1 + 0.14 * c;
+      d.jx = c > 0 ? G.rand(-1, 1) : 0;
+      if (d.t >= d.delay) {
+        Object.assign(d, { phase: 'air', t: 0, sx: 1, sy: 1, flips: 0, label: '??' });
+        SFX.launch(i);
+        burst(i, 6, 0.6);
+      }
+    } else if (d.phase === 'air') {
+      d.t += dt;
+      const p = Math.min(1, d.t / AIR);
+      d.h = 4 * 52 * p * (1 - p);
+      const ph = p * Math.PI * FLIPS;
+      d.sq = Math.max(0.08, Math.abs(Math.cos(ph)));
+      const k = Math.floor(ph / Math.PI + 0.5);
+      if (k !== d.flips) {
+        d.flips = k;
+        if (k >= FLIPS) { d.face = d.final; d.theme = 'bone'; }
+        else { d.face = G.randi(1, 6); d.theme = Math.random() < 0.35 ? 'hack' : 'bone'; }
+        SFX.flipTick(k + i);
+      }
+      d.jx = Math.sin(p * Math.PI * 3) * 2;
+      d.label = HEX[G.randi(0, 15)] + HEX[G.randi(0, 15)];
+      d.trail.push({ h: d.h, face: d.face, theme: d.theme, sq: d.sq, jx: d.jx });
+      if (d.trail.length > 5) d.trail.shift();
+      if (p >= 1) land(d, i);
+    } else if (d.phase === 'land') {
+      d.t += dt;
+      const p = Math.min(1, d.t / SETTLE);
+      const s = Math.cos(p * Math.PI * 2.5) * (1 - p);
+      d.sx = 1 + 0.4 * s; d.sy = 1 - 0.4 * s;
+      if (p >= 1) Object.assign(d, { phase: 'idle', sx: 1, sy: 1 });
+    }
+  }
+  updateFx(dt);
+}
+
+function updateFx(dt) {
+  shownScore += (run.score - shownScore) * Math.min(1, dt * 7);
+  if (Math.abs(run.score - shownScore) < 0.5) shownScore = run.score;
+  if (cur) { cur.cp = Math.max(0, cur.cp - dt * 5); cur.mp = Math.max(0, cur.mp - dt * 5); cur.tp = Math.max(0, cur.tp - dt * 3); }
+  for (const [k, v] of badgePop) { if (v - dt * 3 <= 0) badgePop.delete(k); else badgePop.set(k, v - dt * 3); }
+  for (const p of parts) { p.vy += 420 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; }
+  parts = parts.filter(p => p.life > 0);
+  for (const r of rings) { r.r += 70 * dt; r.life -= dt * 2.6; }
+  rings = rings.filter(r => r.life > 0);
+  for (const f of floats) { f.y -= 20 * dt; f.life -= dt; }
+  floats = floats.filter(f => f.life > 0);
+}
+
+// ------------------------------------------------------------
+//  render helpers
+// ------------------------------------------------------------
+function drawSq(img, cx, by, s, sx, sy, alpha = 1) {
+  const w = Math.max(1, Math.round(img.width * s * sx)), h = Math.max(1, Math.round(img.height * s * sy));
+  G.ctx.globalAlpha = alpha;
+  G.ctx.drawImage(img, Math.round(cx - w / 2), Math.round(by - h), w, h);
+  G.ctx.globalAlpha = 1;
+}
+
+// ------------------------------------------------------------
+//  render: sidebar
+// ------------------------------------------------------------
+function drawSidebar() {
+  const { rect, text, T } = G;
+  const x = SBX + 4, R = SBX + SBW - 4;
+  const inShop = mode === 'shop';
+
+  // firewall + target (in the shop: the NEXT firewall)
+  const r = inShop ? run.round + 1 : run.round;
+  UI.panel(SBX, 20, SBW, 42, PAL.red);
+  text(inShop ? 'NEXT UP' : 'FIREWALL', x, 24, '#8a7fc0');
+  text(r + '/' + RULES.ROUNDS, R, 24, PAL.green, { align: 'right' });
+  text('TARGET', x, 35, '#8a7fc0');
+  UI.boxNum(fmtNum(RULES.target(r)), SBX + SBW / 2, 45, SBW, PAL.gold);
+
+  // round score + progress
+  const done = run.score >= run.target;
+  UI.panel(SBX, 66, SBW, 40, PAL.green);
+  text(inShop ? 'LAST SCORE' : 'SCORE', x, 70, '#8a7fc0');
+  UI.boxNum(fmtNum(shownScore), SBX + SBW / 2, 80, SBW, done ? PAL.green : PAL.white);
+  const pct = G.clamp(shownScore / run.target, 0, 1);
+  rect(x, 97, SBW - 8, 5, PAL.ink);
+  rect(x + 1, 98, Math.round((SBW - 10) * pct), 3, done ? PAL.gold : PAL.green);
+
+  // hand: chips x mult
+  UI.panel(SBX, 110, SBW, 44, '#7d9bff');
+  if (cur) text(cur.proto + ' LV' + cur.lv, x, 114, cur.col);
+  else text(mode === 'rolling' ? 'ROLLING...' : '-- NO HAND --', x, 114, '#5a4c99');
+  const cy = 125, bw = 38, bh = 18;
+  const cpY = cur ? -Math.round(cur.cp * 2) : 0, mpY = cur ? -Math.round(cur.mp * 2) : 0;
+  G.rrect(x - 1, cy - 1 + cpY, bw + 2, bh + 2, PAL.ink);
+  G.rrect(x, cy + cpY, bw, bh, cur && cur.cp > 0.5 ? '#6d8cff' : '#2f4fae');
+  G.rrect(R - bw - 1, cy - 1 + mpY, bw + 2, bh + 2, PAL.ink);
+  G.rrect(R - bw, cy + mpY, bw, bh, cur && cur.mp > 0.5 ? '#ff6b75' : '#b02a3a');
+  text('X', SBX + SBW / 2, cy + 6, PAL.red, { align: 'center', shadow: PAL.ink });
+  UI.boxNum(cur ? fmtNum(cur.chips) : '0', x + bw / 2, cy + 3 + cpY, bw, PAL.white);
+  UI.boxNum(cur ? fmtMult(cur.mult) : '0', R - bw / 2, cy + 3 + mpY, bw, PAL.white);
+
+  // rolls + credits
+  const total = rollsPerRound(run);
+  const left = inShop ? total : run.rollsLeft;
+  UI.panel(SBX, 158, SBW, 42, PAL.gold);
+  text('ROLLS', x, 162, '#8a7fc0');
+  text(String(left), R, 162, left <= 2 && !inShop ? PAL.red : PAL.white, { align: 'right' });
+  const pw = Math.max(3, Math.min(9, Math.floor((SBW - 6) / total)));
+  for (let k = 0; k < total; k++) {
+    const on = k < left;
+    rect(x + k * pw, 172, pw - 2, 5, PAL.ink);
+    rect(x + k * pw + 1, 173, pw - 4, 3, on ? (left <= 2 && !inShop && Math.floor(T * 4) % 2 ? PAL.red : PAL.green) : '#241a4a');
+  }
+  text('$' + run.money, x, 184, PAL.gold, { scale: 2, shadow: PAL.ink });
+}
+
+// ------------------------------------------------------------
+//  render: perk strip + tooltip
+// ------------------------------------------------------------
+function drawPerkStrip() {
+  const { rrect, rect, text } = G;
+  if (!run.perks.length) {
+    text('NO PERKS YET // BUY THEM IN THE BLACK MARKET', CX, PSY + 8, '#3f3570', { align: 'center' });
+    return;
+  }
+  const max = BADGES_PER_ROW * 2;
+  run.perks.slice(0, max).forEach((p, k) => {
+    const b = badgeXY(k);
+    const pop = badgePop.get(p.uid) || 0;
+    const y = b.y - Math.round(pop * 3) - (hoverPerk === k ? 1 : 0);
+    const col = RARITY.col[p.rarity];
+    rrect(b.x - 1, y - 1, BADGE_W + 2, BADGE_H + 2, PAL.ink);
+    rrect(b.x, y, BADGE_W, BADGE_H, pop > 0.3 ? PAL.white : col);
+    rect(b.x + 1, y + 1, BADGE_W - 2, BADGE_H - 2, pop > 0.3 ? col : '#15112c');
+    text(PERK_DEFS[p.id].code, b.x + BADGE_W / 2, y + 2, pop > 0.3 ? PAL.ink : PAL.white, { align: 'center' });
+  });
+  if (run.perks.length > max) text('+' + (run.perks.length - max), TX + TW, PSY + 16, '#8a7fc0', { align: 'right' });
+}
+
+function drawPerkTip() {
+  if (hoverPerk < 0) return;
+  const p = run.perks[hoverPerk];
+  const col = RARITY.col[p.rarity];
+  let d = itemDesc(p, true);
+  if (p.id === 'streak') d += ` STACKS NOW: ${p.stats.stacks}.`;
+  if (p.id === 'hothand') d += ` STREAK NOW: ${run.hot}.`;
+  if (p.id === 'pity' && run.pity) d += ` STORED: ${run.pity}.`;
+  UI.infoBox(TX + 4, 120, TW - 8, 48, PERK_DEFS[p.id].name, col, RARITY.name[p.rarity], col, d, PAL.white);
+}
+
+// ------------------------------------------------------------
+//  render: table
+// ------------------------------------------------------------
+function drawTable() {
+  const { rrect, rect, ctx } = G;
+  rrect(TX - 5, TY - 5, TW + 10, TH + 10, PAL.ink);
+  rrect(TX - 4, TY - 4, TW + 8, TH + 8, '#3d2416');
+  rect(TX - 2, TY - 4, TW + 4, 1, '#7a4a2a');
+  rect(TX - 2, TY + TH + 3, TW + 4, 1, '#24140c');
+  rrect(TX - 1, TY - 1, TW + 2, TH + 2, PAL.ink);
+  ctx.globalAlpha = 0.55 + Math.sin(G.T * 2) * 0.15;
+  rrect(TX - 1, TY - 1, TW + 2, TH + 2, PAL.mgreen);
+  ctx.globalAlpha = 1;
+  ctx.drawImage(felt, TX, TY);
+}
+
+function drawBrackets(x, y, w, h, col, e) {
+  const { rect } = G;
+  const L = 6;
+  x -= e; y -= e; w += e * 2; h += e * 2;
+  rect(x, y, L, 2, col); rect(x, y, 2, L, col);
+  rect(x + w - L, y, L, 2, col); rect(x + w - 2, y, 2, L, col);
+  rect(x, y + h - 2, L, 2, col); rect(x, y + h - L, 2, L, col);
+  rect(x + w - L, y + h - 2, L, 2, col); rect(x + w - 2, y + h - L, 2, L, col);
+}
+
+function drawSlot(i, off) {
+  const { rrect, rect, ctx, text, T } = G;
+  const d = dice[i];
+  const x = slotX(i), y = SY + off;
+  rrect(x - 1, y - 1, SLOT + 2, SLOT + 2, PAL.ink);
+  rrect(x, y, SLOT, SLOT, '#241a4a');
+  rect(x + 2, y + 2, SLOT - 4, SLOT - 4, '#0b0920');
+  ctx.fillStyle = '#18133a';
+  for (let gy = y + 4; gy < y + SLOT - 3; gy += 4)
+    for (let gx = x + 4; gx < x + SLOT - 3; gx += 4) ctx.fillRect(gx, gy, 1, 1);
+  rect(x + 2, y + 2, SLOT - 4, 1, '#05040c');
+  if (d.flash > 0) { ctx.globalAlpha = d.flash * 0.7; rect(x + 2, y + 2, SLOT - 4, SLOT - 4, PAL.mint); ctx.globalAlpha = 1; }
+
+  let col = '#4b3a8c', e = 0;
+  if (d.scoring && result) { col = Math.floor(T * 6) % 2 ? result.col : PAL.white; e = 1 + Math.round(Math.abs(Math.sin(T * 5))); }
+  else if (hover >= 0) { col = hover === i ? PAL.green : PAL.mgreen; e = hover === i ? 1 + Math.round(Math.abs(Math.sin(T * 8))) : 0; }
+  else if (d.phase === 'air' || d.phase === 'wait') col = PAL.mgreen;
+  drawBrackets(x, y, SLOT, SLOT, col, e);
+
+  text('0' + (i + 1), x + 1, y + SLOT + 4, '#5a4c99');
+  let label, lc;
+  if (d.phase === 'air') { label = '0X' + d.label; lc = PAL.mint; }
+  else if (d.phase === 'wait') { label = '....'; lc = PAL.mgreen; }
+  else { label = '[' + d.face + ']'; lc = d.scoring && result ? result.col : PAL.white; }
+  text(label, x + SLOT - 1, y + SLOT + 4, lc, { align: 'right' });
+}
+
+function drawDie(i, off) {
+  const { ctx, rect, T } = G;
+  const d = dice[i];
+  const cx = dieX(i) + d.jx;
+  const base = REST + off;
+
+  const sw = Math.max(6, Math.round(28 * (1 - d.h / 100)));
+  ctx.globalAlpha = 0.5; rect(cx - sw / 2, base + 1, sw, 2, '#000000'); ctx.globalAlpha = 1;
+
+  d.trail.forEach((tr, k) => {
+    const img = tinted(DIE[tr.theme][tr.face], k % 2 ? PAL.magenta : PAL.cyan);
+    drawSq(img, dieX(i) + tr.jx, base - tr.h, 2, tr.sq, 1, 0.1 + k * 0.05);
+  });
+
+  let bob = 0;
+  if (d.phase === 'idle') {
+    if (d.scoring && result) bob = Math.round(Math.abs(Math.sin(T * 6 + i * 0.7)) * 3);
+    else if (hover >= 0) bob = Math.round(Math.abs(Math.sin(T * 9 + i * 0.9)) * 1.5);
+  }
+  bob += Math.round(d.pop * 6);
+  const img = DIE[d.theme][d.face];
+  const ps = 1 + d.pop * 0.2;
+  const sx = (d.phase === 'air' ? d.sq : d.sx) * ps, sy = (d.phase === 'air' ? 1 : d.sy) * ps;
+  if (d.scoring && result && d.phase === 'idle') {
+    const glow = tinted(img, result.col);
+    for (const [ox, oy] of [[-2, 0], [2, 0], [0, -2], [0, 2]]) drawSq(glow, cx + ox, base - bob + oy, 2, sx, sy, 0.8);
+  }
+  drawSq(img, cx, base - d.h - bob, 2, sx, sy);
+}
+
+function drawResult() {
+  const { text, clamp, easeOutBack, T } = G;
+  if (mode === 'rolling') {
+    const dots = '.'.repeat(1 + Math.floor(T * 6) % 3);
+    text('DECRYPTING' + dots, CX - 33, 126, PAL.green, { shadow: PAL.ink });
+    return;
+  }
+  if (!result || isOverlay()) return;
+  text(result.name, CX, 120, result.col, { align: 'center', scale: 2, outline: PAL.ink, wave: result.tier >= 3 ? 1 : 0, t: T });
+  if (cur && cur.showTotal) {
+    const pop = easeOutBack(clamp(1 - cur.tp, 0, 1));
+    G.ctx.globalAlpha = clamp(pop, 0, 1);
+    text('+' + fmtNum(cur.total), CX, 140 + Math.round((1 - pop) * 8), PAL.gold, { align: 'center', scale: 2, outline: PAL.ink });
+    G.ctx.globalAlpha = 1;
+  }
+}
+
+function drawIntro() {
+  if (mode !== 'intro') return;
+  const { rect, text, ctx, easeOutCubic, clamp } = G;
+  const pin = easeOutCubic(clamp(modeT / 0.3, 0, 1));
+  const pout = clamp((modeT - (INTRO - 0.3)) / 0.3, 0, 1);
+  const dx = Math.round((1 - pin) * -TW + pout * TW);
+  const y = 118;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(TX, TY, TW, TH); ctx.clip();
+  ctx.globalAlpha = 0.88; rect(TX + dx, y, TW, 34, PAL.ink); ctx.globalAlpha = 1;
+  rect(TX + dx, y, TW, 1, PAL.green); rect(TX + dx, y + 33, TW, 1, PAL.green);
+  text('FIREWALL ' + run.round + '/' + RULES.ROUNDS, CX + dx, y + 5, PAL.white, { align: 'center', scale: 2, shadow: PAL.ink });
+  text('TARGET ' + fmtNum(run.target) + '  //  ' + run.rollsLeft + ' ROLLS', CX + dx, y + 23, PAL.green, { align: 'center' });
+  ctx.restore();
+}
+
+// ------------------------------------------------------------
+//  render: overlays (breached / denied / rooted)
+// ------------------------------------------------------------
+function drawOverlay() {
+  if (!isOverlay()) { btns = []; return; }
+  const { rect, rrect, text, ctx, clamp, easeOutBack, T } = G;
+  const p = easeOutBack(clamp(modeT / 0.35, 0, 1));
+  ctx.globalAlpha = 0.6 * clamp(modeT / 0.2, 0, 1); rect(TX, TY, TW, TH, '#000000'); ctx.globalAlpha = 1;
+  const y0 = Math.round(OY + (1 - p) * 30);
+  const accent = mode === 'cleared' ? PAL.green : mode === 'failed' ? PAL.red : PAL.magenta;
+  rrect(OX - 2, y0 - 2, OW + 4, OH + 4, PAL.ink);
+  rrect(OX - 1, y0 - 1, OW + 2, OH + 2, accent);
+  rrect(OX, y0, OW, OH, '#120e28');
+  const L = OX + 14, R = OX + OW - 14;
+  btns = [];
+
+  if (mode === 'cleared') {
+    text('FIREWALL BREACHED', CX, y0 + 8, PAL.green, { align: 'center', scale: 2, outline: PAL.ink, wave: 1, t: T });
+    text('SCORED ' + fmtNum(run.score) + ' / ' + fmtNum(run.target), CX, y0 + 28, '#a99be0', { align: 'center' });
+    reward.rows.forEach(([a, b], i) => {
+      if (reward.shown <= i) return;
+      text(a, L, y0 + 42 + i * 10, PAL.white);
+      text('$' + b, R, y0 + 42 + i * 10, PAL.gold, { align: 'right' });
+    });
+    if (reward.shown > reward.rows.length) {
+      const ly = y0 + 44 + reward.rows.length * 10;
+      rect(L, ly, R - L, 1, '#2e2260');
+      text('TOTAL', L, ly + 4, PAL.white);
+      text('+$' + reward.total, R, ly + 4, PAL.gold, { align: 'right' });
+      const last = run.round >= RULES.ROUNDS;
+      btns.push({ x: CX - 64, y: y0 + 98, w: 128, h: 15, label: last ? 'FINISH RUN >' : 'BLACK MARKET >', act: nextFirewall, ...UI.BTN.green });
+    }
+  } else if (mode === 'failed') {
+    text('ACCESS DENIED', CX, y0 + 8, PAL.red, { align: 'center', scale: 2, outline: PAL.ink });
+    text('RUN TERMINATED AT FIREWALL ' + run.round + '/' + RULES.ROUNDS, CX, y0 + 32, PAL.white, { align: 'center' });
+    text('SCORED ' + fmtNum(run.score) + ' / ' + fmtNum(run.target), CX, y0 + 46, '#a99be0', { align: 'center' });
+    text('SHORT BY ' + fmtNum(run.target - run.score), CX, y0 + 58, PAL.gold, { align: 'center' });
+    text(run.perks.length + ' PERKS OWNED', CX, y0 + 70, '#8a7fc0', { align: 'center' });
+    if (modeT > 0.8) {
+      btns.push({ x: CX - 66, y: y0 + 98, w: 62, h: 15, label: 'RETRY', act: () => { SFX.select(); newRun(); }, ...UI.BTN.green });
+      btns.push({ x: CX + 4, y: y0 + 98, w: 62, h: 15, label: 'MENU', act: () => { SFX.select(); G.goTo('menu'); }, ...UI.BTN.blue });
+    }
+  } else if (mode === 'won') {
+    text('SYSTEM ROOTED', CX, y0 + 8, PAL.magenta, { align: 'center', scale: 2, outline: PAL.ink, wave: 1, t: T });
+    text('ALL ' + RULES.ROUNDS + ' FIREWALLS BREACHED', CX, y0 + 32, PAL.white, { align: 'center' });
+    text('CREDITS $' + run.money, CX, y0 + 46, PAL.gold, { align: 'center' });
+    text('ROLLS USED ' + run.rollsUsed + ' // ' + run.perks.length + ' PERKS', CX, y0 + 58, '#a99be0', { align: 'center' });
+    if (modeT > 0.8) {
+      btns.push({ x: CX - 66, y: y0 + 98, w: 62, h: 15, label: 'NEW RUN', act: () => { SFX.select(); newRun(); }, ...UI.BTN.green });
+      btns.push({ x: CX + 4, y: y0 + 98, w: 62, h: 15, label: 'MENU', act: () => { SFX.select(); G.goTo('menu'); }, ...UI.BTN.blue });
+    }
+  }
+  btns.forEach((b, i) => UI.button(b, hoverBtn === i));
+}
+
+function drawHUD() {
+  const { rect, rrect, text, W } = G;
+  rect(0, 0, W, 15, PAL.ink);
+  rect(0, 15, W, 1, PAL.purple);
+  rrect(3, 2, 46, 11, menuHover ? PAL.green : '#2e2260');
+  text('< MENU', 6, 4, menuHover ? PAL.ink : PAL.white);
+  text(mode === 'shop' ? '~/DOKER/BLACK-MARKET' : '~/DOKER/TABLE', CX, 4, mode === 'shop' ? PAL.magenta : PAL.green, { align: 'center' });
+  text('RUN $' + run.money, W - 5, 4, PAL.gold, { align: 'right' });
+}
+
+function drawFx() {
+  const { ctx, rect, text, clamp } = G;
+  for (const r of rings) {
+    ctx.globalAlpha = Math.max(0, r.life) * 0.8;
+    const s = Math.round(r.r);
+    rect(r.x - s, r.y - s, s * 2, 1, PAL.green); rect(r.x - s, r.y + s, s * 2 + 1, 1, PAL.green);
+    rect(r.x - s, r.y - s, 1, s * 2, PAL.green); rect(r.x + s, r.y - s, 1, s * 2, PAL.green);
+  }
+  for (const p of parts) { ctx.globalAlpha = clamp(p.life * 2, 0, 1); rect(p.x, p.y, p.s, p.s, p.col); }
+  ctx.globalAlpha = 1;
+}
+function drawFloats() {
+  const { ctx, text, clamp } = G;
+  for (const f of floats) {
+    ctx.globalAlpha = clamp(f.life * 2, 0, 1);
+    text(f.txt, f.x, f.y, f.col, { align: 'center', outline: PAL.ink, scale: f.big ? 2 : 1 });
+  }
+  ctx.globalAlpha = 1;
+}
+
+function render() {
+  const { text, T } = G;
+  G.drawBackground(TABLE_RAMP);
+  G.drawRain(0.12);
+
+  if (mode === 'shop') {
+    SHOP.render();
+    drawSidebar();
+    drawHUD();
+    drawFloats();
+    return;
+  }
+
+  drawTable();
+  for (let i = 0; i < N; i++) {
+    const p = slotDrop(i);
+    if (p > 0) drawSlot(i, Math.round((1 - G.easeOutBack(p)) * -140));
+  }
+  for (let i = 0; i < N; i++) {
+    const p = slotDrop(i);
+    if (p > 0) drawDie(i, Math.round((1 - G.easeOutBack(p)) * -140));
+  }
+  drawFx();
+  drawResult();
+  drawIntro();
+  drawPerkStrip();
+  drawPerkTip();
+  drawOverlay();
+  drawSidebar();
+  drawHUD();
+  drawFloats();
+
+  if (mode === 'ready' && hoverPerk < 0 && Math.floor(T * 2) % 2 === 0)
+    text(run.rollsLeft === 1 ? 'LAST ROLL!' : run.rollsRound === 0 ? 'CLICK ANY DIE TO ROLL' : 'ROLL AGAIN',
+      CX, 153, run.rollsLeft === 1 ? PAL.red : PAL.gold, { align: 'center', shadow: PAL.ink });
+
+  G.drawTicker(TICK);
+}
+
+// ------------------------------------------------------------
+//  input
+// ------------------------------------------------------------
+function onPointer() {
+  if (menuHover) { SFX.select(); G.goTo('menu'); return; }
+  if (mode === 'shop') { SHOP.onPointer(); return; }
+  if (hoverBtn >= 0 && btns[hoverBtn]) { btns[hoverBtn].act(); return; }
+  if (mode === 'intro' && enterT > 1) { setMode('ready'); return; }
+  if (hover >= 0) rollAll();
+}
+function onKey(k) {
+  if (k === 'escape' || k === 'backspace') { SFX.select(); G.goTo('menu'); return; }
+  if (mode === 'shop') { SHOP.onKey(k); return; }
+  if (k !== ' ' && k !== 'enter') return;
+  if (isOverlay()) { if (btns[0]) btns[0].act(); return; }
+  if (mode === 'intro' && enterT > 1) { setMode('ready'); return; }
+  rollAll();
+}
+const hot = () => menuHover || (mode === 'shop' ? SHOP.hot() : hover >= 0 || hoverBtn >= 0 || hoverPerk >= 0);
+
+return {
+  enter, update, render, onPointer, onKey, hot, rollAll,
+  set auto(v) { auto = v; },
+  // dev hooks for testing
+  get run() { return run; },
+  debugShop() { setMode('shop'); SHOP.enter(run, () => startRound(run.round + 1)); },
+};
+})();
