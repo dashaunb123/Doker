@@ -181,9 +181,9 @@ function startRound(r) {
   result = null; cur = null; reward = null; seq = []; seqT = 0;
   dice.forEach(d => (d.scoring = false));
   BOSS.setup(run, bossHooks);
-  MUSIC.play(track());
   if (run.boss) { setMode('bossintro'); BOSS.intro(() => setMode('ready')); }
   else { setMode('intro'); if (r > 1) SFX.whoosh(); }
+  MUSIC.play(track());   // after setMode: coming from the shop, mode must no longer be 'shop'
   saveRun('round');
 }
 
