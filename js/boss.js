@@ -285,7 +285,7 @@ function update(dt) {
     if (t < 0.55) { y = -60; frame = 'idle'; }
     else if (t < 0.85) { const p = (t - 0.55) / 0.3; y = lerp(-60, cy, p * p); }
     else {
-      if (!cut.landed) { cut.landed = true; y = cy; SFX.slam(5); G.shake(7); G.flash(0.3); frame = 'act'; for (let k = 0; k < 16; k++) hk.spark(cx + G.rand(-30, 30), cy - G.rand(0, 8)); }
+      if (!cut.landed) { cut.landed = true; y = cy; SFX.slam(4); G.shake(7); G.flash(0.3); frame = 'act'; for (let k = 0; k < 16; k++) hk.spark(cx + G.rand(-30, 30), cy - G.rand(0, 8)); }
       if (t > 1.15 && frame === 'act') frame = 'idle';
       if (t > 1.35 && !cut.said) { cut.said = true; say(P.intro, 2.0); }
     }

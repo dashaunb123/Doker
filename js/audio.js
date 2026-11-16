@@ -24,6 +24,8 @@ const SFX = {
 
   tone(f, dur, o = {}) {
     if (!this.ok) return;
+    // a bad pitch (NaN/undefined) makes Web Audio throw "Failed to execute ... non-finite": just skip the note
+    if (!Number.isFinite(f) || !Number.isFinite(dur) || (o.to !== undefined && !Number.isFinite(o.to))) return;
     const t0 = this.ac.currentTime + (o.delay || 0);
     const osc = this.ac.createOscillator(), g = this.ac.createGain();
     osc.type = o.type || 'square';
@@ -75,6 +77,7 @@ const SFX = {
   flipTick(k) { this.tone(700 + k * 70, 0.025, { vol: 0.05 }); this.noise(0.015, { vol: 0.05, freq: 4000 }); },
   slam(i) {
     const notes = [523.25, 587.33, 659.25, 783.99, 880.0];
+    i = (((i | 0) % notes.length) + notes.length) % notes.length;
     this.tone(150, 0.2, { type: 'sine', to: 42, vol: 0.45 });                       // thump
     this.noise(0.08, { vol: 0.22, freq: 900, ftype: 'lowpass' });                    // wood crack
     this.noise(0.03, { vol: 0.1, freq: 5000 });                                      // click
