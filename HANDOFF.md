@@ -29,6 +29,7 @@ Controls: mouse, or **Space** = roll · **Esc** = back to menu · **M** = mute a
 | Decluttered table (no slot labels under dice, no HOUSE OF BONES / TABLE text) | Done |
 | Wildcards: all 19 from DESIGN.md §6, 5 slots on the felt, sell/move, editions, Wildcard Drop pack, slots-full swap in shop | Done |
 | Boss firewalls: rounds 4 + 8 get ENCRYPTION / LAG / SANDBOX / DDOS / HONEYPOT, warned one round early | Done |
+| Boss characters (`js/boss.js`, sprites in `js/bossart.js`): intro cutscene, live on the felt, physically enforce their rule | Done |
 | Exploits, upgradable dice, starting rigs, Dealer reactions | Planned |
 | Extra hand types (Small Straight, Parity, Bookends) | Needs precedence rules first |
 | Seeds / daily run, endless mode | Parked |
@@ -51,6 +52,8 @@ Plain `<script>` files (no modules, so it runs from `file://`). Load order matte
 | `js/items.js` | Rarity, perk/patch definitions, packs, and the perk engine (`scoreRoll`, `dieWeights`, …) |
 | `js/ui.js` | Shared drawing: panels, buttons, item cards, pack art, info box |
 | `js/shop.js` | Black Market + pack opening |
+| `js/boss.js` | Boss actors: personas/quips, intro cutscene, task-queue animations, rule set-pieces (stomp, padlock, eat rolls, cage, bite) |
+| `js/bossart.js` | Boss sprite frames (idle, blink, act, peek, hurt) |
 | `js/play.js` | The table: run flow, dice animation, scoring sequence, sidebar, perk strip, autosave (`localStorage` key `doker.save.v1`) |
 | `js/menu.js` | Boot + menu scene, main loop, input, scene transitions, shared helpers (`window.G`) |
 

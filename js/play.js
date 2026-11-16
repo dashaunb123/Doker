@@ -58,6 +58,18 @@ function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /*
 const slotX = i => SX0 + i * (SLOT + GAP);
 const wildX = i => WX0 + i * (WW + WG);
 const canEditWilds = () => mode === 'ready' || mode === 'intro';
+/** What the boss actor (js/boss.js) is allowed to touch on the table. */
+const bossHooks = {
+  TX, TY, TW, TH, dieX: i => dieX(i), dieTop: SY + 6, resultY: 120,
+  face: i => dice[i].face,
+  setFace: (i, f) => { const d = dice[i]; d.face = f; d.flash = 1; d.pop = 1; burst(i, 12, 1.2); },
+  float: (x, y, txt, col, big) => floats.push({ x, y, txt, col, life: 1.2, big }),
+  spark: (x, y) => parts.push({ x, y, vx: G.rand(-90, 90), vy: G.rand(-150, -30), life: G.rand(0.3, 0.7), col: G.pick([PAL.red, PAL.white, PAL.magenta, PAL.gold]), s: Math.random() < 0.3 ? 2 : 1 }),
+  rollsBox: { x: SBX, y: 158 },
+  get perkBox() { return { x: PSX, y: PSY, w: TW, h: run.perks.length > BADGES_PER_ROW ? BADGE_H * 2 + 3 : BADGE_H }; },
+  encrypted: i => dice[i].face === 6 || (dice[i].face === 1 && wildsOf(run, 'ducky').length > 0),
+};
+
 function removeWild(w) {
   const k = run.wilds.indexOf(w);
   if (k >= 0) run.wilds.splice(k, 1);
@@ -139,6 +151,7 @@ function continueRun() {
     shownScore = run.score;
     result = null; cur = null; reward = null; seq = []; seqT = 0;
     dice.forEach(dd => (dd.scoring = false));
+    BOSS.setup(run, bossHooks); BOSS.resume();
     setMode('intro');
   }
   return true;
@@ -164,9 +177,9 @@ function startRound(r) {
   run.rollsRound = 0;
   result = null; cur = null; reward = null; seq = []; seqT = 0;
   dice.forEach(d => (d.scoring = false));
-  setMode('intro');
-  if (r > 1) SFX.whoosh();
-  if (run.boss) { SFX.fail(); G.glitch(0.5); G.shake(3); }
+  BOSS.setup(run, bossHooks);
+  if (run.boss) { setMode('bossintro'); BOSS.intro(() => setMode('ready')); }
+  else { setMode('intro'); if (r > 1) SFX.whoosh(); }
   saveRun('round');
 }
 
@@ -187,11 +200,11 @@ function rollAll() {
   run.phantom = wildsOf(run, 'phantom').length ? rollFace(w) : 0;
   dice.forEach(d => (d.dropped = false));
   const finals = dice.map(() => rollFace(w));
-  if (run.ddosDie >= 0) finals[run.ddosDie] = 1;
   const flips = bitFlips(run, finals);
   if (run.ddosDie >= 0) delete flips[run.ddosDie];
+  const freeze = BOSS.beforeRoll();
   dice.forEach((d, i) => Object.assign(d, {
-    phase: 'wait', t: 0, delay: i * STAGGER, final: finals[i], flipTo: flips[i] || 0, flips: 0, scoring: false,
+    phase: 'wait', t: 0, delay: i * STAGGER + freeze, final: finals[i], flipTo: flips[i] || 0, flips: 0, scoring: false,
   }));
   SFX.rollStart();
   G.glitch(0.08);
@@ -219,6 +232,7 @@ function startScoring() {
   sc.notes.forEach(n => at(0.05, () => floats.push({ x: dieX(n.i), y: SY - 16, txt: n.txt, col: PAL.magenta, life: 1.2 })));
   if (sc.dropped >= 0) at(0.05, () => { floats.push({ x: dieX(sc.dropped), y: SY - 16, txt: 'DROPPED', col: '#8a7fc0', life: 1.2 }); wildsOf(run, 'packetloss').forEach(popPerk); });
   const honeypot = run.boss === 'honeypot' && sc.key === 'pair';
+  BOSS.onScore(sc.key);
   if (sc.phantomUsed) at(0.05, () => wildsOf(run, 'phantom').forEach(w => { popPerk(w); wildFloat(w, 'GHOST ' + run.phantom, PAL.cyan); }));
 
   let t = 0;
@@ -271,7 +285,7 @@ function startScoring() {
   at(t, () => {
     cur.total = Math.round(cur.chips * cur.mult) * (honeypot ? -1 : 1);
     cur.showTotal = true; cur.tp = 1;
-    if (honeypot) { floats.push({ x: CX, y: 104, txt: 'HONEYPOT!', col: PAL.red, life: 1.4, big: true }); SFX.deny(); G.glitch(0.4); }
+    if (honeypot) { floats.push({ x: CX, y: 104, txt: 'HONEYPOT!', col: PAL.red, life: 1.4, big: true }); SFX.deny(); G.glitch(0.4); BOSS.bite(); }
     const power = cur.total / run.target;
     SFX.multHit(power);
     G.shake(Math.min(5, 1 + power * 5));
@@ -279,6 +293,7 @@ function startScoring() {
   t += 0.75;
   at(t, () => {
     run.score = Math.max(0, run.score + cur.total); SFX.coin(); afterRoll(run, sc.key, faces);
+    if (run.score < run.target) BOSS.react(sc.key);
     // CRYPTO MINER pays out for every 6
     const sixes = faces.filter(f => f === 6).length;
     if (sixes) for (const w of wildsOf(run, 'miner')) { run.money += sixes; popPerk(w); wildFloat(w, '+$' + sixes, PAL.gold); }
@@ -299,6 +314,7 @@ function endRoll() {
 
 function breach() {
   setMode('cleared');
+  BOSS.defeat();
   const rows = [['BREACH REWARD', RULES.reward(run.round)]];
   if (run.rollsLeft > 0) rows.push(['UNUSED ROLLS X' + run.rollsLeft, run.rollsLeft]);
   const intr = interestFor(run);
@@ -316,6 +332,7 @@ function breach() {
 
 function fail() {
   setMode('failed');
+  BOSS.gloat();
   clearSave();
   SFX.fail();
   G.glitch(0.7); G.shake(5);
@@ -360,7 +377,7 @@ function land(d, i) {
       SFX.glitch(); G.glitch(0.12);
     });
   }
-  if (i === N - 1) at(0.45, startScoring);
+  if (i === N - 1) at(0.45, () => BOSS.afterLand(startScoring));
 }
 
 function badgeXY(k) {
@@ -385,6 +402,7 @@ function update(dt) {
   prevMenuHover = menuHover;
 
   if (mode === 'shop') { SHOP.update(dt); updateFx(dt); return; }
+  BOSS.update(dt);
 
   // ---- hover ----
   hover = -1; hoverBtn = -1; hoverPerk = -1; hoverWild = -1; hoverWBtn = -1;
@@ -528,8 +546,8 @@ function drawSidebar() {
   UI.boxNum(cur ? fmtMult(cur.mult) : '0', R - bw / 2, cy + 3 + mpY, bw, PAL.white);
 
   // rolls + credits
-  const total = rollsPerRound(run);
-  const left = inShop ? total : run.rollsLeft;
+  const total = rollsPerRound(run) + (inShop ? 0 : BOSS.held);
+  const left = inShop ? total : run.rollsLeft + BOSS.held;
   UI.panel(SBX, 158, SBW, 42, PAL.gold);
   text('ROLLS', x, 162, '#8a7fc0');
   text(String(left), R, 162, left <= 2 && !inShop ? PAL.red : PAL.white, { align: 'right' });
@@ -883,13 +901,17 @@ function render() {
     if (p > 0) drawDie(i, Math.round((1 - G.easeOutBack(p)) * -140));
   }
   drawFx();
+  BOSS.draw();
   drawResult();
   drawIntro();
   drawPerkStrip();
+  BOSS.drawCage();
   drawPerkTip();
   if (!isOverlay()) drawWildPanel(); else wbtns = [];
+  if (isOverlay()) BOSS.drawActor();
   drawOverlay();
   drawSidebar();
+  if (!isOverlay()) BOSS.drawActor();
   drawHUD();
   drawFloats();
 
@@ -898,6 +920,7 @@ function render() {
       CX, 153, run.rollsLeft === 1 ? PAL.red : PAL.gold, { align: 'center', shadow: PAL.ink });
 
   G.drawTicker(TICK);
+  BOSS.drawCut();
 }
 
 // ------------------------------------------------------------
@@ -906,6 +929,7 @@ function render() {
 function onPointer() {
   if (menuHover) { SFX.select(); G.goTo('menu'); return; }
   if (mode === 'shop') { SHOP.onPointer(); return; }
+  if (mode === 'bossintro') { BOSS.skip(); return; }
   if (hoverBtn >= 0 && btns[hoverBtn]) { btns[hoverBtn].act(); return; }
   if (wbtns[hoverWBtn]) { const b = wbtns[hoverWBtn]; hoverWBtn = -1; if (b.disabled) SFX.deny(); else b.act(); return; }
   if (hoverWild >= 0 && canEditWilds()) { selWild = selWild === hoverWild ? -1 : hoverWild; SFX.select(); return; }
@@ -917,6 +941,7 @@ function onKey(k) {
   if (k === 'escape' || k === 'backspace') { SFX.select(); G.goTo('menu'); return; }
   if (mode === 'shop') { SHOP.onKey(k); return; }
   if (k !== ' ' && k !== 'enter') return;
+  if (mode === 'bossintro') { BOSS.skip(); return; }
   selWild = -1;
   if (isOverlay()) { if (btns[0]) btns[0].act(); return; }
   if (mode === 'intro' && enterT > 1) { setMode('ready'); return; }
