@@ -105,7 +105,8 @@ function wildFloat(w, txt, col, big) {
 }
 const dieX = i => slotX(i) + SLOT / 2;
 const slotDrop = i => G.clamp((enterT - 0.15 - i * 0.07) / 0.45, 0, 1);
-const isOverlay = () => mode === 'cleared' || mode === 'failed' || mode === 'won';
+let overlayDelay = 0;   // seconds the breach / fail panel waits so the boss's last word and the final hand land first
+const isOverlay = () => (mode === 'cleared' || mode === 'failed' || mode === 'won') && modeT >= overlayDelay;
 
 /** Schedule fn to run `t` seconds from now. */
 function at(t, fn) { seq.push({ t: seqT + t, fn }); }
@@ -674,14 +675,16 @@ function endRoll() {
   if (run.score >= run.target) breach();
   else if (run.rollsLeft <= 0) {
     const fw = wildsOf(run, 'firewall')[0];
-    if (fw) { wildFloat(fw, 'FIREWALL BURNED', PAL.orange, true); removeWild(fw); G.flash(0.4); G.shake(4); breach(); }
+    if (fw) { wildFloat(fw, 'FIREWALL BURNED', PAL.orange, true); removeWild(fw); G.flash(0.4); G.shake(4); breach(true); }
     else fail();
   }
   else { setMode('ready'); saveRun('round'); }
 }
 
-function breach() {
-  setMode('cleared');
+function breach(saved = false) {
+  // boss firewalls (and a FIREWALL save) hold the panel back so you see the boss react / the card burn
+  const d = run.boss || saved ? 1.5 : 0.6;
+  setMode('cleared'); overlayDelay = d;
   BOSS.defeat();
   const rows = [['BREACH REWARD', RULES.reward(run.round)]];
   const rollPay = unusedRollPay(run);
@@ -702,12 +705,12 @@ function breach() {
   SFX.breach();
   G.flash(0.35); G.glitch(0.25);
   for (let i = 0; i < N; i++) burst(i, 14, 1.8);
-  rows.forEach((_, i) => at(0.45 + i * 0.3, () => { reward.shown = i + 1; SFX.coin(); }));
-  at(0.45 + rows.length * 0.3, () => { reward.shown = rows.length + 1; run.money = Math.max(0, run.money + reward.total); SFX.select(); saveRun('cleared'); });
+  rows.forEach((_, i) => at(d + 0.45 + i * 0.3, () => { reward.shown = i + 1; SFX.coin(); }));
+  at(d + 0.45 + rows.length * 0.3, () => { reward.shown = rows.length + 1; run.money = Math.max(0, run.money + reward.total); SFX.select(); saveRun('cleared'); });
 }
 
 function fail() {
-  setMode('failed');
+  setMode('failed'); overlayDelay = run.boss ? 1.8 : 0.8;   // the boss gets to gloat before ACCESS DENIED
   BOSS.gloat();
   clearSave();
   SFX.fail();
@@ -719,7 +722,7 @@ function nextFirewall() {
   SFX.select();
   if (run.round >= RULES.ROUNDS) {
     clearSave(); run.unlocked = recordWin(run.rig || 'stock', stakeOf(run));
-    setMode('won'); SFX.hand(7); G.flash(0.7); G.glitch(0.5); return;
+    setMode('won'); overlayDelay = 0; SFX.hand(7); G.flash(0.7); G.glitch(0.5); return;
   }
   G.glitch(0.3); SFX.whoosh();
   openShop(null);
@@ -1034,7 +1037,7 @@ function drawSidebar() {
 
   // hand: chips x mult
   UI.panel(SBX, 110, SBW, 44, '#7d9bff');
-  if (cur) text(cur.proto + ' LV' + cur.lv, x, 114, cur.col);
+  if (cur) { const lbl = cur.proto + ' LV' + cur.lv; text(textWidth(lbl) > 89 ? cur.proto + ' L' + cur.lv : lbl, x, 114, cur.col); }
   else text(mode === 'rolling' ? 'ROLLING...' : '-- NO HAND --', x, 114, '#5a4c99');
   const cy = 125, bw = 38, bh = 18;
   const cpY = cur ? -Math.round(cur.cp * 2) : 0, mpY = cur ? -Math.round(cur.mp * 2) : 0;
@@ -1388,8 +1391,9 @@ function drawIntro() {
 function drawOverlay() {
   if (!isOverlay()) { btns = []; return; }
   const { rect, rrect, text, ctx, clamp, easeOutBack, T } = G;
-  const p = easeOutBack(clamp(modeT / 0.35, 0, 1));
-  ctx.globalAlpha = 0.6 * clamp(modeT / 0.2, 0, 1); rect(TX, TY, TW, TH, '#000000'); ctx.globalAlpha = 1;
+  const ot = modeT - overlayDelay;
+  const p = easeOutBack(clamp(ot / 0.35, 0, 1));
+  ctx.globalAlpha = 0.6 * clamp(ot / 0.2, 0, 1); rect(TX, TY, TW, TH, '#000000'); ctx.globalAlpha = 1;
   const y0 = Math.round(OY + (1 - p) * 30);
   const accent = mode === 'cleared' ? PAL.green : mode === 'failed' ? PAL.red : PAL.magenta;
   rrect(OX - 2, y0 - 2, OW + 4, OH + 4, PAL.ink);
@@ -1420,7 +1424,7 @@ function drawOverlay() {
     text('SCORED ' + fmtNum(run.score) + ' / ' + fmtNum(run.target), CX, y0 + 46, '#a99be0', { align: 'center' });
     text('SHORT BY ' + fmtNum(run.target - run.score), CX, y0 + 58, PAL.gold, { align: 'center' });
     text(run.perks.length + ' PERKS OWNED', CX, y0 + 70, '#8a7fc0', { align: 'center' });
-    if (modeT > 0.8) {
+    if (ot > 0.8) {
       btns.push({ x: CX - 66, y: y0 + 98, w: 62, h: 15, label: 'RETRY', act: () => { SFX.select(); newRun(run.rig, run.stake); }, ...UI.BTN.green });
       btns.push({ x: CX + 4, y: y0 + 98, w: 62, h: 15, label: 'MENU', act: () => { SFX.select(); G.goTo('menu'); }, ...UI.BTN.blue });
     }
@@ -1429,8 +1433,8 @@ function drawOverlay() {
     text('ALL ' + RULES.ROUNDS + ' FIREWALLS BREACHED', CX, y0 + 32, PAL.white, { align: 'center' });
     text('CREDITS $' + run.money, CX, y0 + 46, PAL.gold, { align: 'center' });
     text(RIG[run.rig || 'stock'].name + ' // ' + STAKES[stakeOf(run) - 1].name, CX, y0 + 58, STAKES[stakeOf(run) - 1].col, { align: 'center' });
-    (run.unlocked || []).slice(0, 2).forEach((u, k) => text('UNLOCKED ' + u, CX, y0 + 70 + k * 10, PAL.green, { align: 'center', wave: 1, t: T }));
-    if (modeT > 0.8) {
+    (run.unlocked || []).slice(0, 2).forEach((u, k) => text('UNLOCKED ' + u, CX, y0 + 69 + k * 12, PAL.green, { align: 'center' }));
+    if (ot > 0.8) {
       btns.push({ x: CX - 66, y: y0 + 98, w: 62, h: 15, label: 'NEW RUN', act: () => { SFX.select(); openSetup(); }, ...UI.BTN.green });
       btns.push({ x: CX + 4, y: y0 + 98, w: 62, h: 15, label: 'MENU', act: () => { SFX.select(); G.goTo('menu'); }, ...UI.BTN.blue });
     }
@@ -1475,7 +1479,9 @@ function drawFloats() {
   const { ctx, text, clamp } = G;
   for (const f of floats) {
     ctx.globalAlpha = clamp(f.life * 2, 0, 1);
-    text(f.txt, f.x, f.y, f.col, { align: 'center', outline: PAL.ink, scale: f.big ? 2 : 1 });
+    const sc = f.big ? 2 : 1, hw = Math.ceil(textWidth(String(f.txt).toUpperCase(), sc) / 2) + 2;
+    const x = hw * 2 > G.W ? G.W / 2 : clamp(f.x, hw, G.W - hw);   // keep popups on screen
+    text(f.txt, x, f.y, f.col, { align: 'center', outline: PAL.ink, scale: hw * 2 > G.W ? 1 : sc });
   }
   ctx.globalAlpha = 1;
 }

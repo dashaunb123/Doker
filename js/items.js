@@ -297,7 +297,7 @@ function itemName(it) {
   if (it.kind === 'diemod') return DIEMOD_DEFS[it.id].name;
   if (it.kind === 'wild') return WILD_DEFS[it.id].name;
   if (it.kind === 'exploit') return EXPLOIT_DEFS[it.id].name;
-  return it.kind === 'perk' ? PERK_DEFS[it.id].name : HANDS[it.key].proto + ' PATCH';
+  return it.kind === 'perk' ? PERK_DEFS[it.id].name : (it.key === 'bust' ? 'BUST' : HANDS[it.key].proto) + ' PATCH';
 }
 function itemCode(it) {
   if (it.kind === 'sticker') return STICKER_DEFS[it.id].code;
@@ -579,13 +579,13 @@ const BOSSES = {
   sandbox:    { name: 'SANDBOX',    short: 'PERKS OFFLINE', text: 'YOUR PERKS ARE OFFLINE.' },
   ddos:       { name: 'DDOS',       short: 'ONE DIE STUCK ON 1', text: 'ONE DIE IS STUCK ON 1.' },
   honeypot:   { name: 'HONEYPOT',   short: 'PAIRS SCORE NOTHING', text: 'PAIRS GET EATEN: THEY SCORE NOTHING.' },
-  phisher:    { name: 'PHISHER',    short: 'SOME DICE ARE FAKE BAIT', text: 'HALF YOUR ROLLS, ONE DIE IS FAKE BAIT AND COUNTS FOR NOTHING.' },
-  twofa:      { name: '2FA',        short: 'REPEAT HANDS SCORE HALF', text: 'A HAND YOU ALREADY SCORED THIS FIREWALL ONLY SCORES HALF.' },
-  kernelpanic:{ name: 'KERNEL PANIC', short: 'HAND DIE REROLLS', text: 'AFTER YOUR DICE LAND, A DIE IN YOUR HAND REROLLS.' },
-  trojan:     { name: 'TROJAN',     short: 'A WILDCARD IS INFECTED', text: 'EACH ROLL ONE WILDCARD IS INFECTED AND DOES NOTHING.' },
-  blackout:   { name: 'BLACKOUT',   short: 'DICE HIDDEN, -1 ROLL', text: 'YOUR DICE STAY HIDDEN UNTIL THEY SCORE. ONE FEWER ROLL.' },
+  phisher:    { name: 'PHISHER',    short: 'SOME DICE ARE FAKE BAIT', text: 'HALF YOUR ROLLS HIDE A WORTHLESS BAIT DIE.' },
+  twofa:      { name: '2FA',        short: 'REPEAT HANDS SCORE HALF', text: 'REPEAT A HAND THIS FIREWALL: IT SCORES HALF.' },
+  kernelpanic:{ name: 'KERNEL PANIC', short: 'HAND DIE REROLLS', text: 'AFTER DICE LAND, A DIE IN YOUR HAND REROLLS.' },
+  trojan:     { name: 'TROJAN',     short: 'A WILDCARD IS INFECTED', text: 'EACH ROLL, ONE WILDCARD IS INFECTED.' },
+  blackout:   { name: 'BLACKOUT',   short: 'DICE HIDDEN, -1 ROLL', text: 'DICE STAY HIDDEN UNTIL THEY SCORE. -1 ROLL.' },
   // the finale: always firewall 8. Runs other bosses' rules at once (run.houseRules: 2, or 3 on GREY HAT+).
-  house:      { name: 'THE HOUSE',  short: 'RULES STACK UP', text: 'THE DEALER WAS THE HOUSE ALL ALONG. RULES STACK UP.' },
+  house:      { name: 'THE HOUSE',  short: 'RULES STACK UP', text: 'THE DEALER WAS THE HOUSE ALL ALONG.' },
 };
 const BOSS_POOL = Object.keys(BOSSES).filter(b => b !== 'house');
 /** Unbiased in-place shuffle (sort(() => Math.random() - 0.5) is NOT random: it barely moves items). */
