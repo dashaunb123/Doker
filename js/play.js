@@ -65,7 +65,10 @@ function loadSave() {
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } }
 
 const slotX = i => SX0 + i * (SLOT + GAP);
-const wildX = i => wildX0() + i * (WW + WG);
+const wslotX = s => wildX0() + s * (WW + WG);
+/** Where wildcard i (index in run.wilds) sits, mid-slide if it's moving. */
+const wildX = i => { const w = run.wilds[i], tx = wslotX(wildSlotsOf(run)[i] ?? i); return w && wildAnim.has(w.uid) ? Math.round(wildAnim.get(w.uid)) : tx; };
+const wildAnim = new Map();   // uid -> drawn x, eased toward the card's slot (cards slide when the row changes)
 const canEditWilds = () => mode === 'ready' || mode === 'intro';
 /** The look of die i at rest: its mod (gold/glass/neon/weighted) or plain bone. */
 const dieTheme = i => (run && dieMod(run, i)) || 'bone';
@@ -93,6 +96,7 @@ const bossHooks = {
 function removeWild(w) {
   const k = run.wilds.indexOf(w);
   if (k >= 0) run.wilds.splice(k, 1);
+  packWilds(run);
   selWild = -1;
 }
 function wildFloat(w, txt, col, big) {
@@ -145,7 +149,7 @@ function buildFelt() {
 function enter() {
   if (!felt) felt = buildFelt();
   enterT = 0;
-  parts = []; rings = []; floats = [];
+  parts = []; rings = []; floats = []; wildAnim.clear();
   dice = Array.from({ length: N }, (_, i) => ({
     face: i + 1, theme: 'bone', phase: 'idle', t: 0, delay: 0, final: 1, flipTo: 0, flips: 0,
     h: 0, sq: 1, sx: 1, sy: 1, jx: 0, flash: 0, pop: 0, trail: [], scoring: false, label: '', entered: false,
@@ -162,6 +166,7 @@ function continueRun() {
   if (!d) return false;
   run = d.run;
   run.wilds = run.wilds || [];
+  packWilds(run);
   run.exploits = run.exploits || [];
   run.dieMods = run.dieMods || [null, null, null, null, null];
   run.dieStickers = run.dieStickers || [null, null, null, null, null];
@@ -192,7 +197,7 @@ function newRun(rig = 'stock', stake = 1) {
     levels: {}, bonus: {}, perks: [], wilds: [], hot: 0, pity: 0, prevKey: null, hotShieldUsed: false, phantom: 0, seenKeys: [], exploits: [], dieMods: [null, null, null, null, null], dieStickers: [null, null, null, null, null], ember: [0, 0, 0, 0, 0], injectChips: 0,
     bosses: rollBosses(stake), boss: null, ddosDie: -1,
   };
-  run.houseRules = rollHouseRules(run.bosses);
+  run.houseRules = rollHouseRules(run.bosses, stake >= 2 && KNOBS.greyHat === 'house3' ? 3 : 2);
   // rig loadouts
   if (rig === 'goldbug') run.dieMods = ['gold', 'gold', 'gold', 'gold', 'gold'];
   if (rig === 'glasscannon') run.dieMods = ['glass', 'glass', 'glass', 'glass', 'glass'];
@@ -259,7 +264,7 @@ function launchDice() {
   const w = dieWeights(run);
   run.phantom = wildsOf(run, 'phantom').length || run.rig === 'phantom' ? rollFace(w) : 0;
   run.quantumDie = wildsOf(run, 'quantum').length ? G.randi(0, N - 1) : -1;
-  run.phishDie = ruleOn(run, 'phisher') ? G.randi(0, N - 1) : -1;
+  run.phishDie = ruleOn(run, 'phisher') && Math.random() < KNOBS.phishChance ? G.randi(0, N - 1) : -1;
   run.blackoutHidden = ruleOn(run, 'blackout');
   dice.forEach(d => (d.dropped = false));
   const finals = forceFaces ? forceFaces.slice() : dice.map((_, i) => rollFace(dieWeightsFor(run, i, w)));
@@ -378,8 +383,8 @@ function startScoring() {
   });
   t += 0.2;
   at(t, () => {
-    cur.total = Math.round(cur.chips * cur.mult) * (honeypot ? -1 : 1);
-    if (denied) { cur.total = 0; floats.push({ x: CX, y: 104, txt: '2FA: ' + HANDS[sc.key].name + ' ALREADY USED', col: PAL.red, life: 1.4 }); BOSS.deny(); }
+    cur.total = Math.round(Math.round(cur.chips * cur.mult) * (honeypot ? KNOBS.honeyMult : 1));
+    if (denied) { cur.total = Math.round(cur.total * KNOBS.twofaRepeat); floats.push({ x: CX, y: 104, txt: '2FA: ' + HANDS[sc.key].name + ' AGAIN, HALF', col: PAL.red, life: 1.4 }); BOSS.deny(); }
     if (sc.key === 'bust' && run.lastTotal > 0) for (const w of wildsOf(run, 'ghost')) {
       cur.total = Math.max(cur.total, Math.floor(run.lastTotal / 2));
       popPerk(w); wildFloat(w, 'GHOST', '#b6ffcc');
@@ -390,7 +395,7 @@ function startScoring() {
       floats.push({ x: CX, y: 104, txt: 'COLD BOOT: HALF', col: PAL.cyan, life: 1.2 });
     }
     cur.showTotal = true; cur.tp = 1;
-    if (honeypot) { floats.push({ x: CX, y: 104, txt: 'HONEYPOT!', col: PAL.red, life: 1.4, big: true }); SFX.deny(); G.glitch(0.4); BOSS.bite(); }
+    if (honeypot) { floats.push({ x: CX, y: 104, txt: 'HONEYPOT! PAIR EATEN', col: PAL.red, life: 1.4, big: true }); SFX.deny(); G.glitch(0.4); BOSS.bite(); }
     const power = cur.total / run.target;
     SFX.multHit(power);
     G.shake(Math.min(5, 1 + power * 5));
@@ -399,11 +404,13 @@ function startScoring() {
   at(t, () => {
     run.score = Math.max(0, run.score + cur.total); SFX.coin(); afterRoll(run, sc.key, faces);
     for (let i = 0; i < N; i++) if (dieMod(run, i) === 'ember' && !sc.scoring[i]) run.ember[i] = 0;
-    // TRACE (stake 7+): every 3rd bust raises the target 10%
-    if (sc.key === 'bust' && stakeOf(run) >= 7 && ++run.bustCount % 3 === 0) {
-      run.target = Math.round(run.target * 1.1 / 10) * 10;
-      floats.push({ x: SBX + SBW / 2, y: 50, txt: 'TRACED! +10%', col: PAL.magenta, life: 1.4 });
-      SFX.deny(); G.glitch(0.2);
+    // TRACE (stake 7+): every roll raises the target 2% (KNOBS: trigger / every / pct), always from the base target
+    const traceHit = KNOBS.traceOn === 'roll' || (KNOBS.traceOn === 'weak' ? sc.key === 'bust' || sc.key === 'pair' : sc.key === 'bust');
+    if (traceHit && stakeOf(run) >= 7 && ++run.bustCount % KNOBS.traceEvery === 0) {
+      const steps = run.bustCount / KNOBS.traceEvery;
+      run.target = Math.round(targetFor(run, run.round) * (1 + KNOBS.tracePct * steps) / 10) * 10;
+      floats.push({ x: SBX + SBW / 2, y: 50, txt: 'TRACED +' + Math.round(KNOBS.tracePct * 100 * steps) + '%', col: PAL.magenta, life: 1.1 });
+      G.glitch(0.05);   // every roll: keep it quiet
     }
     // BACKDOOR: the first bust(s) each firewall don't use a roll
     if (sc.key === 'bust') {
@@ -414,13 +421,21 @@ function startScoring() {
         floats.push({ x: CX, y: 104, txt: 'BACKDOOR: ROLL REFUNDED', col: PAL.green, life: 1.3 });
       }
     }
-    // HOT POTATO slides one slot right every roll and burns up off the end
-    const potatoes = run.wilds.filter(w => w.id === 'hotpotato');
-    for (const w of potatoes.reverse()) {
-      const k = run.wilds.indexOf(w);
-      if (k === run.wilds.length - 1) { wildFloat(w, 'BURNED UP', PAL.orange); removeWild(w); SFX.glitch(); }
-      else { [run.wilds[k], run.wilds[k + 1]] = [run.wilds[k + 1], run.wilds[k]]; }
+    // HOT POTATO slides one slot right every roll (through empty slots too) and burns up off the end of the row
+    packWilds(run);
+    const potatoes = run.wilds.filter(w => w.id === 'hotpotato').sort((a, b) => b.state.slot - a.state.slot);
+    for (const w of potatoes) {
+      if (w.state.slot >= wildSlots(run) - 1) {
+        const x = wildX(run.wilds.indexOf(w)) + WW / 2;
+        wildFloat(w, 'BURNED UP', PAL.orange); removeWild(w); wildAnim.delete(w.uid); SFX.glitch();
+        for (let k = 0; k < 16; k++) parts.push({ x: x + G.rand(-10, 10), y: WY + G.rand(2, WH - 2), vx: G.rand(-30, 90), vy: G.rand(-90, -10), life: G.rand(0.3, 0.8), col: G.pick([PAL.orange, PAL.gold, PAL.red]), s: Math.random() < 0.4 ? 2 : 1 });
+      } else {
+        const x = wildX(run.wilds.indexOf(w)) + WW;
+        w.state.slot += 1;
+        for (let k = 0; k < 6; k++) parts.push({ x: x - G.rand(0, 8), y: WY + G.rand(4, WH - 4), vx: G.rand(-60, -20), vy: G.rand(-30, 10), life: G.rand(0.25, 0.5), col: G.pick([PAL.orange, PAL.gold]), s: 1 });
+      }
     }
+    packWilds(run);
     // GLASS: 1 in 6 to shatter back into a plain die
     for (const i of glassHit) if (Math.random() < GLASS_BREAK) {
       run.dieMods[i] = null; dice[i].theme = 'bone'; dice[i].flash = 1;
@@ -664,7 +679,7 @@ function breach() {
   if (run.ice === 'tax') rows.push(['ICE TAX', -2]);
   const intr = interestFor(run);
   if (intr > 0) rows.push(['COMPOUND INTEREST', intr]);
-  if (run.boss) rows.push(['BOSS BOUNTY', BOSS_BOUNTY]);
+  if (run.boss && !(stakeOf(run) >= 2 && KNOBS.greyHat === 'boss6nb')) rows.push(['BOSS BOUNTY', BOSS_BOUNTY]);
   for (const p of perksOf(run, 'speedrun')) if (run.rollsLeft >= p.stats.left) rows.push(['SPEEDRUN', p.stats.amt]);
   for (const w of wildsOf(run, 'snakeoil')) w.state.bonus = (w.state.bonus || 0) + 1;
   for (const w of wildsOf(run, 'deaddrop')) if (run.exploits.length < exploitSlots(run)) {
@@ -950,6 +965,14 @@ function updateFx(dt) {
   }
   if (cur) { cur.cp = Math.max(0, cur.cp - dt * 5); cur.mp = Math.max(0, cur.mp - dt * 5); cur.tp = Math.max(0, cur.tp - dt * 3); }
   for (const [k, v] of badgePop) { if (v - dt * 3 <= 0) badgePop.delete(k); else badgePop.set(k, v - dt * 3); }
+  // wildcards glide to their slot (HOT POTATO sliding, sells, moves)
+  if (run) {
+    const pos = wildSlotsOf(run);
+    run.wilds.forEach((w, i) => {
+      const tx = wslotX(pos[i]), cur = wildAnim.has(w.uid) ? wildAnim.get(w.uid) : tx;
+      wildAnim.set(w.uid, Math.abs(tx - cur) < 0.5 ? tx : cur + (tx - cur) * Math.min(1, dt * 9));
+    });
+  }
   for (const p of parts) { p.vy += 420 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; }
   parts = parts.filter(p => p.life > 0);
   for (const r of rings) { r.r += 70 * dt; r.life -= dt * 2.6; }
@@ -1060,7 +1083,16 @@ function drawPerkTip() {
 // ------------------------------------------------------------
 function drawWildRow() {
   const { rect, rrect, text, ctx, T } = G;
-  for (let i = 0; i < wildSlots(run); i++) {
+  const pos = wildSlotsOf(run);
+  for (let s = 0; s < wildSlots(run); s++) {   // empty slot outlines
+    if (pos.includes(s)) continue;
+    const x = wslotX(s);
+    ctx.globalAlpha = 0.5;
+    for (let k = 0; k < WW; k += 4) { rect(x + k, WY, 2, 1, '#2f8f5f'); rect(x + k, WY + WH - 1, 2, 1, '#2f8f5f'); }
+    for (let k = 0; k < WH; k += 4) { rect(x, WY + k, 1, 2, '#2f8f5f'); rect(x + WW - 1, WY + k, 1, 2, '#2f8f5f'); }
+    ctx.globalAlpha = 1;
+  }
+  for (let i = 0; i < run.wilds.length; i++) {
     const x = wildX(i), w = run.wilds[i];
     if (!w) {
       ctx.globalAlpha = 0.5;
@@ -1193,7 +1225,7 @@ function drawWildPanel() {
 function moveWild(dir) {
   const k = selWild, j = k + dir;
   if (j < 0 || j >= run.wilds.length) return;
-  [run.wilds[k], run.wilds[j]] = [run.wilds[j], run.wilds[k]];
+  swapWilds(run, k, j);
   selWild = j;
   SFX.select();
   saveRun('round');
@@ -1329,7 +1361,7 @@ function drawIntro() {
   ctx.globalAlpha = 0.88; rect(TX + dx, by, TW, bh, boss ? '#1a0408' : PAL.ink); ctx.globalAlpha = 1;
   rect(TX + dx, by, TW, 1, acc); rect(TX + dx, by + bh - 1, TW, 1, acc);
   text((boss ? 'BOSS: ' + boss.name : 'FIREWALL ' + run.round + '/' + RULES.ROUNDS), CX + dx, by + 5, boss ? PAL.red : PAL.white, { align: 'center', scale: 2, shadow: PAL.ink });
-  if (boss) text(boss.text, CX + dx, by + 22, PAL.white, { align: 'center' });
+  if (boss) text(run.boss === 'house' ? 'RULES: ' + bossShort(run, 'house') : boss.text, CX + dx, by + 22, PAL.white, { align: 'center' });
   else if (run.ice) text('ICE ' + ICE[run.ice].name + ': ' + ICE[run.ice].text, CX + dx, by - 10, PAL.cyan, { align: 'center', outline: PAL.ink });
   text('TARGET ' + fmtNum(run.target) + '  //  ' + run.rollsLeft + ' ROLLS', CX + dx, by + bh - 11, acc, { align: 'center' });
   ctx.restore();
@@ -1401,10 +1433,11 @@ function drawHUD() {
   const HX = (52 + W - 60) / 2;
   if (mode !== 'shop' && run.boss) {
     const b = BOSSES[run.boss];
-    text((Math.floor(G.T * 3) % 2 ? '! ' : '  ') + 'BOSS ' + b.name + ': ' + bossShort(run, run.boss), HX, 4, PAL.red, { align: 'center' });
+    const head = run.boss === 'house' ? 'HOUSE: ' : 'BOSS ' + b.name + ': ';   // 3 HOUSE rules only fit without the prefix
+    text((Math.floor(G.T * 3) % 2 ? '! ' : '  ') + head + bossShort(run, run.boss), HX, 4, PAL.red, { align: 'center' });
   } else {
     const nb = bossOf(run, run.round + 1);
-    if (nb) text('BOSS NEXT: ' + BOSSES[nb].name + ' // ' + bossShort(run, nb), HX, 4, PAL.orange, { align: 'center' });
+    if (nb) text('BOSS NEXT: ' + BOSSES[nb].name + ' // ' + (nb === 'house' ? (run.houseRules || []).length + ' RULES AT ONCE' : BOSSES[nb].short), HX, 4, PAL.orange, { align: 'center' });
     else if (mode !== 'shop' && run.ice) text('ICE ' + ICE[run.ice].name + ': ' + ICE[run.ice].text, HX, 4, PAL.cyan, { align: 'center' });
   }
   const st = STAKES[stakeOf(run) - 1];
