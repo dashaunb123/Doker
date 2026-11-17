@@ -192,7 +192,7 @@ function newRun(rig = 'stock', stake = 1) {
     levels: {}, bonus: {}, perks: [], wilds: [], hot: 0, pity: 0, prevKey: null, hotShieldUsed: false, phantom: 0, seenKeys: [], exploits: [], dieMods: [null, null, null, null, null], dieStickers: [null, null, null, null, null], ember: [0, 0, 0, 0, 0], injectChips: 0,
     bosses: rollBosses(stake), boss: null, ddosDie: -1,
   };
-  run.houseRules = rollHouseRules(run.bosses);
+  run.houseRules = rollHouseRules(run.bosses, stake >= 2 && KNOBS.greyHat === 'house3' ? 3 : 2);
   // rig loadouts
   if (rig === 'goldbug') run.dieMods = ['gold', 'gold', 'gold', 'gold', 'gold'];
   if (rig === 'glasscannon') run.dieMods = ['glass', 'glass', 'glass', 'glass', 'glass'];
@@ -259,7 +259,7 @@ function launchDice() {
   const w = dieWeights(run);
   run.phantom = wildsOf(run, 'phantom').length || run.rig === 'phantom' ? rollFace(w) : 0;
   run.quantumDie = wildsOf(run, 'quantum').length ? G.randi(0, N - 1) : -1;
-  run.phishDie = ruleOn(run, 'phisher') ? G.randi(0, N - 1) : -1;
+  run.phishDie = ruleOn(run, 'phisher') && Math.random() < KNOBS.phishChance ? G.randi(0, N - 1) : -1;
   run.blackoutHidden = ruleOn(run, 'blackout');
   dice.forEach(d => (d.dropped = false));
   const finals = forceFaces ? forceFaces.slice() : dice.map((_, i) => rollFace(dieWeightsFor(run, i, w)));
@@ -379,7 +379,7 @@ function startScoring() {
   t += 0.2;
   at(t, () => {
     cur.total = Math.round(cur.chips * cur.mult) * (honeypot ? -1 : 1);
-    if (denied) { cur.total = 0; floats.push({ x: CX, y: 104, txt: '2FA: ' + HANDS[sc.key].name + ' ALREADY USED', col: PAL.red, life: 1.4 }); BOSS.deny(); }
+    if (denied) { cur.total = Math.round(cur.total * KNOBS.twofaRepeat); floats.push({ x: CX, y: 104, txt: '2FA: ' + HANDS[sc.key].name + ' AGAIN, HALF', col: PAL.red, life: 1.4 }); BOSS.deny(); }
     if (sc.key === 'bust' && run.lastTotal > 0) for (const w of wildsOf(run, 'ghost')) {
       cur.total = Math.max(cur.total, Math.floor(run.lastTotal / 2));
       popPerk(w); wildFloat(w, 'GHOST', '#b6ffcc');
@@ -399,11 +399,13 @@ function startScoring() {
   at(t, () => {
     run.score = Math.max(0, run.score + cur.total); SFX.coin(); afterRoll(run, sc.key, faces);
     for (let i = 0; i < N; i++) if (dieMod(run, i) === 'ember' && !sc.scoring[i]) run.ember[i] = 0;
-    // TRACE (stake 7+): every 3rd bust raises the target 10%
-    if (sc.key === 'bust' && stakeOf(run) >= 7 && ++run.bustCount % 3 === 0) {
-      run.target = Math.round(run.target * 1.1 / 10) * 10;
-      floats.push({ x: SBX + SBW / 2, y: 50, txt: 'TRACED! +10%', col: PAL.magenta, life: 1.4 });
-      SFX.deny(); G.glitch(0.2);
+    // TRACE (stake 7+): every roll raises the target 2% (KNOBS: trigger / every / pct), always from the base target
+    const traceHit = KNOBS.traceOn === 'roll' || (KNOBS.traceOn === 'weak' ? sc.key === 'bust' || sc.key === 'pair' : sc.key === 'bust');
+    if (traceHit && stakeOf(run) >= 7 && ++run.bustCount % KNOBS.traceEvery === 0) {
+      const steps = run.bustCount / KNOBS.traceEvery;
+      run.target = Math.round(targetFor(run, run.round) * (1 + KNOBS.tracePct * steps) / 10) * 10;
+      floats.push({ x: SBX + SBW / 2, y: 50, txt: 'TRACED +' + Math.round(KNOBS.tracePct * 100 * steps) + '%', col: PAL.magenta, life: 1.1 });
+      G.glitch(0.05);   // every roll: keep it quiet
     }
     // BACKDOOR: the first bust(s) each firewall don't use a roll
     if (sc.key === 'bust') {
@@ -664,7 +666,7 @@ function breach() {
   if (run.ice === 'tax') rows.push(['ICE TAX', -2]);
   const intr = interestFor(run);
   if (intr > 0) rows.push(['COMPOUND INTEREST', intr]);
-  if (run.boss) rows.push(['BOSS BOUNTY', BOSS_BOUNTY]);
+  if (run.boss && !(stakeOf(run) >= 2 && KNOBS.greyHat === 'boss6nb')) rows.push(['BOSS BOUNTY', BOSS_BOUNTY]);
   for (const p of perksOf(run, 'speedrun')) if (run.rollsLeft >= p.stats.left) rows.push(['SPEEDRUN', p.stats.amt]);
   for (const w of wildsOf(run, 'snakeoil')) w.state.bonus = (w.state.bonus || 0) + 1;
   for (const w of wildsOf(run, 'deaddrop')) if (run.exploits.length < exploitSlots(run)) {
@@ -1329,7 +1331,7 @@ function drawIntro() {
   ctx.globalAlpha = 0.88; rect(TX + dx, by, TW, bh, boss ? '#1a0408' : PAL.ink); ctx.globalAlpha = 1;
   rect(TX + dx, by, TW, 1, acc); rect(TX + dx, by + bh - 1, TW, 1, acc);
   text((boss ? 'BOSS: ' + boss.name : 'FIREWALL ' + run.round + '/' + RULES.ROUNDS), CX + dx, by + 5, boss ? PAL.red : PAL.white, { align: 'center', scale: 2, shadow: PAL.ink });
-  if (boss) text(boss.text, CX + dx, by + 22, PAL.white, { align: 'center' });
+  if (boss) text(run.boss === 'house' ? 'RULES: ' + bossShort(run, 'house') : boss.text, CX + dx, by + 22, PAL.white, { align: 'center' });
   else if (run.ice) text('ICE ' + ICE[run.ice].name + ': ' + ICE[run.ice].text, CX + dx, by - 10, PAL.cyan, { align: 'center', outline: PAL.ink });
   text('TARGET ' + fmtNum(run.target) + '  //  ' + run.rollsLeft + ' ROLLS', CX + dx, by + bh - 11, acc, { align: 'center' });
   ctx.restore();
@@ -1401,10 +1403,11 @@ function drawHUD() {
   const HX = (52 + W - 60) / 2;
   if (mode !== 'shop' && run.boss) {
     const b = BOSSES[run.boss];
-    text((Math.floor(G.T * 3) % 2 ? '! ' : '  ') + 'BOSS ' + b.name + ': ' + bossShort(run, run.boss), HX, 4, PAL.red, { align: 'center' });
+    const head = run.boss === 'house' ? 'HOUSE: ' : 'BOSS ' + b.name + ': ';   // 3 HOUSE rules only fit without the prefix
+    text((Math.floor(G.T * 3) % 2 ? '! ' : '  ') + head + bossShort(run, run.boss), HX, 4, PAL.red, { align: 'center' });
   } else {
     const nb = bossOf(run, run.round + 1);
-    if (nb) text('BOSS NEXT: ' + BOSSES[nb].name + ' // ' + bossShort(run, nb), HX, 4, PAL.orange, { align: 'center' });
+    if (nb) text('BOSS NEXT: ' + BOSSES[nb].name + ' // ' + (nb === 'house' ? (run.houseRules || []).length + ' RULES AT ONCE' : BOSSES[nb].short), HX, 4, PAL.orange, { align: 'center' });
     else if (mode !== 'shop' && run.ice) text('ICE ' + ICE[run.ice].name + ': ' + ICE[run.ice].text, HX, 4, PAL.cyan, { align: 'center' });
   }
   const st = STAKES[stakeOf(run) - 1];

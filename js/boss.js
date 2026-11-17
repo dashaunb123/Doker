@@ -66,8 +66,8 @@ const PERSONA = {
   },
   twofa: {
     title: 'THE GATEKEEPER', col: '#e43b44',
-    intro: 'ONE CODE. ONE USE. NO EXCEPTIONS.',
-    act: ['DENIED.', 'CODE ALREADY USED.', 'NOT ON THE LIST.'],
+    intro: 'ONE CODE. ONE USE. USE IT TWICE, PAY TWICE.',
+    act: ['CODE ALREADY USED.', 'PARTIAL ACCESS.', 'HALF CREDIT. AT BEST.'],
     peek: ['VERIFYING...', 'CHECKING ID.'],
     bust: ['ACCESS: NONE.', 'TRY AGAIN IN 30 SECONDS.'], big: ['...VERIFIED. FOR NOW.', 'HOW DID THAT GET THROUGH?'],
     defeat: 'SESSION... EXPIRED...', gloat: 'ACCOUNT LOCKED.',
@@ -415,7 +415,12 @@ function afterLand(done) {
   }
   if (has('kernelpanic')) {
     // smack one die (never the DDOS die); it reboots to a new face
-    const opts = [0, 1, 2, 3, 4].filter(i => i !== run.ddosDie);
+    let opts = [0, 1, 2, 3, 4].filter(i => i !== run.ddosDie);
+    if (KNOBS.kpHand) {
+      const sc = evalHand(run, [0, 1, 2, 3, 4].map(k => hk.face(k)), 0);
+      const inHand = opts.filter(i => sc.scoring && sc.scoring[i]);
+      if (inHand.length) opts = inHand;
+    }
     const i = pick(opts), tx = hk.dieX(i), top = hk.dieTop, hi = nearest(tx);
     reach(hi, tx, top - 20, 0.26, 'fist', 'act', 12);
     reach(hi, tx, top + 10, 0.06, 'fist', 'act', 0);

@@ -794,7 +794,7 @@ function update(dt) {
       // ?wilds=dealer,mirror,botnet  (or ?wilds=3 for random ones); &ed=holo forces an edition
       if (params.has('wilds')) {
         const v = params.get('wilds') || '3';
-        const ids = /^\d+$/.test(v) ? WILD_IDS.slice().sort(() => Math.random() - 0.5).slice(0, +v) : v.split(',');
+        const ids = /^\d+$/.test(v) ? shuffle(WILD_IDS.slice()).slice(0, +v) : v.split(',');
         ids.slice(0, WILD_SLOTS).forEach(id => applyItem(PLAY.run, makeWild(id, params.get('ed') || undefined)));
       }
       // ?mods=gold,glass,neon,weighted  put die mods on dice 1-5 (use - to skip a die)

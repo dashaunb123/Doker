@@ -476,12 +476,12 @@ const RIG = Object.fromEntries(RIGS.map(r => [r.id, r]));
 // each stake keeps every rule below it
 const STAKES = [
   { name: 'WHITE HAT',   col: '#f4f4f4', desc: 'THE NORMAL GAME.' },
-  { name: 'GREY HAT',    col: '#a9a9bd', desc: 'AN EXTRA BOSS ON FIREWALL 6.' },
+  { name: 'GREY HAT',    col: '#a9a9bd', desc: '+1 BOSS ON FIREWALL 6. HOUSE PLAYS 3 RULES.' },
   { name: 'BLACK HAT',   col: '#5a5478', desc: 'TARGETS ARE 25% HIGHER.' },
   { name: 'ZERO DAY',    col: '#e43b44', desc: 'UNUSED ROLLS ONLY PAY HALF (ROUNDED DOWN).' },
   { name: 'ICE',         col: '#2ce8f5', desc: 'NORMAL FIREWALLS GET A SMALL ICE RULE.' },
   { name: 'HONEYNET',    col: '#feae34', desc: 'SHOP PRICES +$1. REROLLS START AT $3.' },
-  { name: 'TRACE',       col: '#ff3df2', desc: 'EVERY 3RD BUST RAISES THE TARGET BY 10%.' },
+  { name: 'TRACE',       col: '#ff3df2', desc: 'EVERY ROLL RAISES THE TARGET 2%.' },
   { name: 'SINGULARITY', col: '#4dff88', desc: '9 ROLLS. BOSSES ALSO BRING AN ICE RULE.' },
 ];
 // small rules for ICE (stake 5+): normal firewalls, and bosses on SINGULARITY
@@ -506,7 +506,7 @@ function unusedRollPay(run) {
 const wildSlots = run => (run.rig === 'botnet' ? 6 : run.rig === 'burner' ? 4 : WILD_SLOTS);
 const exploitSlots = run => (run.rig === 'root' ? 3 : EXPLOIT_SLOTS);
 function targetFor(run, r) {
-  const t = RULES.target(r) * (stakeOf(run) >= 3 ? 1.25 : 1);
+  const t = RULES.target(r) * (stakeOf(run) >= 3 ? 1.25 : 1) * (stakeOf(run) >= 2 && KNOBS.greyHat === 'boss6x' && (run.bosses || {})[r] ? 1.25 : 1);
   return Math.round(t / 10) * 10;
 }
 
@@ -548,15 +548,20 @@ const BOSSES = {
   sandbox:    { name: 'SANDBOX',    short: 'PERKS OFFLINE', text: 'YOUR PERKS ARE OFFLINE.' },
   ddos:       { name: 'DDOS',       short: 'ONE DIE STUCK ON 1', text: 'ONE DIE IS STUCK ON 1.' },
   honeypot:   { name: 'HONEYPOT',   short: 'PAIRS SCORE NEGATIVE', text: 'PAIRS SCORE NEGATIVE.' },
-  phisher:    { name: 'PHISHER',    short: 'ONE DIE IS FAKE BAIT', text: 'ONE DIE EACH ROLL IS FAKE BAIT AND COUNTS FOR NOTHING.' },
-  twofa:      { name: '2FA',        short: 'EACH HAND SCORES ONCE', text: 'EACH HAND ONLY SCORES ONCE PER FIREWALL.' },
-  kernelpanic:{ name: 'KERNEL PANIC', short: 'A DIE REROLLS ITSELF', text: 'AFTER YOUR DICE LAND, ONE OF THEM REROLLS.' },
+  phisher:    { name: 'PHISHER',    short: 'SOME DICE ARE FAKE BAIT', text: 'HALF YOUR ROLLS, ONE DIE IS FAKE BAIT AND COUNTS FOR NOTHING.' },
+  twofa:      { name: '2FA',        short: 'REPEAT HANDS SCORE HALF', text: 'A HAND YOU ALREADY SCORED THIS FIREWALL ONLY SCORES HALF.' },
+  kernelpanic:{ name: 'KERNEL PANIC', short: 'HAND DIE REROLLS', text: 'AFTER YOUR DICE LAND, A DIE IN YOUR HAND REROLLS.' },
   trojan:     { name: 'TROJAN',     short: 'A WILDCARD IS INFECTED', text: 'EACH ROLL ONE WILDCARD IS INFECTED AND DOES NOTHING.' },
   blackout:   { name: 'BLACKOUT',   short: 'DICE HIDDEN, -1 ROLL', text: 'YOUR DICE STAY HIDDEN UNTIL THEY SCORE. ONE FEWER ROLL.' },
-  // the finale: always firewall 8. Runs two other bosses' rules at once (run.houseRules).
-  house:      { name: 'THE HOUSE',  short: 'TWO RULES AT ONCE', text: 'THE DEALER WAS THE HOUSE ALL ALONG. TWO RULES AT ONCE.' },
+  // the finale: always firewall 8. Runs other bosses' rules at once (run.houseRules: 2, or 3 on GREY HAT+).
+  house:      { name: 'THE HOUSE',  short: 'RULES STACK UP', text: 'THE DEALER WAS THE HOUSE ALL ALONG. RULES STACK UP.' },
 };
 const BOSS_POOL = Object.keys(BOSSES).filter(b => b !== 'house');
+/** Unbiased in-place shuffle (sort(() => Math.random() - 0.5) is NOT random: it barely moves items). */
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+  return arr;
+}
 /** Which boss rules are live right now (THE HOUSE runs two at once). */
 function bossRules(run) { return !run.boss ? [] : run.boss === 'house' ? run.houseRules || [] : [run.boss]; }
 const ruleOn = (run, id) => bossRules(run).includes(id);
@@ -564,18 +569,26 @@ const ruleOn = (run, id) => bossRules(run).includes(id);
 function bossShort(run, b) { return b === 'house' ? (run.houseRules || []).map(r => BOSSES[r].name).join(' + ') : BOSSES[b].short; }
 const BOSS_ROUNDS = [4, 8];
 const BOSS_BOUNTY = 2;
+// balance knobs: tools/balance/sim.js overrides these from the URL (?traceEvery=2 ...) to test tweaks
+const KNOBS = {
+  traceOn: 'roll', traceEvery: 1, tracePct: 0.02,   // TRACE stake: every Nth bust | roll | weak (pair/bust) raises the target by pct
+  phishChance: 0.5,                // PHISHER: chance a roll carries bait
+  twofaRepeat: 0.5,                // 2FA: a repeated hand scores this fraction
+  kpHand: 1,                       // KERNEL PANIC: 1 = smacks a die that's part of your hand
+  greyHat: 'house3',               // GREY HAT: boss6 | boss6x (boss targets +25%) | boss6nb (no bounty) | house3 (THE HOUSE plays 3 rules)
+};
 function rollBosses(stake = 1) {
-  const ids = BOSS_POOL.slice().sort(() => Math.random() - 0.5);
+  const ids = shuffle(BOSS_POOL.slice());
   const out = {};
   (stake >= 2 ? [4, 6] : [4]).forEach((r, i) => (out[r] = ids[i]));
   out[8] = 'house';
   return out;
 }
 /** THE HOUSE's two rules: bosses you haven't faced this run, if possible. */
-function rollHouseRules(bosses) {
+function rollHouseRules(bosses, n = 2) {
   const seen = Object.values(bosses);
-  const fresh = BOSS_POOL.filter(b => !seen.includes(b)).sort(() => Math.random() - 0.5);
-  return fresh.slice(0, 2);
+  const fresh = shuffle(BOSS_POOL.filter(b => !seen.includes(b)));
+  return fresh.slice(0, n);
 }
 const bossOf = (run, r = run.round) => (run.bosses || {})[r] || null;
 

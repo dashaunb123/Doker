@@ -107,6 +107,7 @@ Example: `index.html?play&perks=14&auto&ff=60`
   ZERO DAY ignores Bust. COOKIE JAR counts this roll's 1s immediately.
 - Bosses: a random boss at round 4 (plus round 6 at stake 2+), THE HOUSE at round 8 with two rules you haven't faced this run;
   same targets as normal rounds, +$2 BOSS BOUNTY. Always check rules with `ruleOn(run, id)`, never `run.boss === id`
+- Balance knobs live in `KNOBS` (js/items.js); tools/balance/sim.html overrides them from the URL. Latest numbers in tools/balance/README.md
   on breach. ENCRYPTION: 6s (incl. Rubber Ducky 6s) count for nothing. LAG: hard cap of 7 rolls even with
   Extra Socket. SANDBOX: perks fully off (incl. dice odds, extra rolls, interest). HONEYPOT: a Pair subtracts
   its score (score can't go below 0).
