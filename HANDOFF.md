@@ -32,11 +32,12 @@ Controls: mouse, or **Space** = roll · **Esc** = back to menu · **M** = mute a
 | Content waves 1+2: 12 die mods, 3 stickers, 12 exploits, 24 perks, 32 wildcards — all with art | Done |
 | Die mods (NEON / GOLD / WEIGHTED / GLASS): permanent upgrades on one of your 5 dice; Dice Lab pack; die picker in the shop | Done |
 | Exploits (NUDGE / CLONE / NUKE / FORCE): 2 slots, fired in the HACK WINDOW after the dice land; Exploit Kit pack | Done |
-| Boss firewalls: rounds 4 + 8 get ENCRYPTION / LAG / SANDBOX / DDOS / HONEYPOT, warned one round early | Done |
+| Boss firewalls: round 4 (and 6 at stake 2+) draws from ENCRYPTION / LAG / SANDBOX / DDOS / HONEYPOT / PHISHER / 2FA / KERNEL PANIC / TROJAN / BLACKOUT, warned one round early | Done |
+| Final boss THE HOUSE (round 8 always): the Dealer unmasked, runs two other bosses' rules at once (`run.houseRules`, checked via `ruleOn`) | Done |
 | Announcer voice (ElevenLabs) — only DOKER is voiced (user's call); straight/full/four takes kept in `assets/voice/` but unused | Done |
 | DOKER!! event (five of a kind): cutscene, DOKER party track, announcer scream | Done |
 | Boss characters (`js/boss.js`, sprites in `js/bossart.js`): intro cutscene, live on the felt, physically enforce their rule | Done |
-| Dealer reactions, upgrades (vouchers), bosses PHISHER/2FA/KERNEL PANIC/TROJAN/BLACKOUT, final boss THE HOUSE | Planned |
+| Dealer reactions, upgrades (vouchers) | Planned |
 | Extra hand types (Small Straight, Parity, Bookends) | Needs precedence rules first |
 | Seeds / daily run, endless mode | Parked |
 
@@ -104,7 +105,8 @@ Example: `index.html?play&perks=14&auto&ff=60`
   Order of scoring: dice → perks → wildcards left to right (each with its edition). MIRROR copies only the
   scoring of the card to its right (not rule changes like Rubber Ducky). PHANTOM can't make straights.
   ZERO DAY ignores Bust. COOKIE JAR counts this roll's 1s immediately.
-- Bosses: two different random bosses per run (rounds 4 and 8), same targets as normal rounds, +$2 BOSS BOUNTY
+- Bosses: a random boss at round 4 (plus round 6 at stake 2+), THE HOUSE at round 8 with two rules you haven't faced this run;
+  same targets as normal rounds, +$2 BOSS BOUNTY. Always check rules with `ruleOn(run, id)`, never `run.boss === id`
   on breach. ENCRYPTION: 6s (incl. Rubber Ducky 6s) count for nothing. LAG: hard cap of 7 rolls even with
   Extra Socket. SANDBOX: perks fully off (incl. dice odds, extra rolls, interest). HONEYPOT: a Pair subtracts
   its score (score can't go below 0).
