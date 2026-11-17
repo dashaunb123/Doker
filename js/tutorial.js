@@ -87,11 +87,12 @@ const STEPS = [
 ];
 
 // ---------- state ----------
-let on = false, i = 0, t = 0, typed = 0, doneT = -1, shown = false;
+let on = false, i = 0, t = 0, typed = 0, shown = false, fade = 0;
 const step = () => STEPS[i];
-function start() { on = true; i = 0; enterStep(); }
+function start() { on = true; i = 0; fade = 0; enterStep(); }
 function stop() { on = false; }
-function enterStep() { t = 0; typed = 0; doneT = -1; shown = false; const s = step(); if (s && s.enter) s.enter(); }
+// the next step is decided on the same frame, so there's never a blank frame between two prompts
+function enterStep() { t = 0; typed = 0; const s = step(); if (s && s.enter) s.enter(); shown = visible(); }
 function next() { i++; if (i >= STEPS.length) { stop(); return; } enterStep(); }
 
 function finish(real) {
@@ -121,20 +122,26 @@ function visible() {
   if (!s) return false;
   if (s.panel) return true;
   if (M() !== 'shop' && anim()) return false;
+  if (M() === 'shop' && SHOP.busy() && !s.free) return false;   // a card is decrypting / a pack is open
   return s.show ? s.show() : true;
 }
 function update(dt) {
   if (!on) return;
+  // the moment you've done what a step asked, it's gone (checked even while hidden, so an old
+  // prompt can never pop back up after an animation) and the next step takes over this frame
+  for (let guard = 0; guard < 4; guard++) {
+    const s = step();
+    if (!s || typeof s.wait !== 'function' || !s.wait()) break;
+    next();
+    if (!on) return;
+  }
   const s = step();
   if (!s) return;
   shown = visible();
-  if (!shown) return;
+  if (!shown) { fade = 0; return; }
+  fade = Math.min(1, fade + dt * 8);
   t += dt;
   typed = Math.min(s.text.length, typed + dt * 90);
-  if (typeof s.wait === 'function' && s.wait()) {
-    if (doneT < 0) doneT = 0;
-    if ((doneT += dt) > 0.35) next();
-  }
 }
 
 // ---------- input: returns true if the tutorial ate it ----------
@@ -237,11 +244,14 @@ function drawEnd() {
 function render() {
   if (!on || !shown) return;
   const s = step();
-  if (s.panel) { dim([], 0.7); if (s.panel === 'hands') drawHands(); else drawEnd(); return; }
+  const { ctx } = G;
+  if (s.panel) { dim([], 0.7 * fade); ctx.globalAlpha = fade; if (s.panel === 'hands') drawHands(); else drawEnd(); ctx.globalAlpha = 1; return; }
   const rs = rects(s);
-  if (s.dim !== false) dim(rs, s.wait === 'next' ? 0.6 : 0.5);
+  if (s.dim !== false) dim(rs, 0.55 * fade);
+  ctx.globalAlpha = fade;
   rs.forEach(r => frame(r, PAL.green));
   drawCoach(s);
+  ctx.globalAlpha = 1;
 }
 
 /** (test harness) what the current step wants */
