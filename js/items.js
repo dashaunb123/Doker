@@ -482,7 +482,7 @@ const STAKES = [
   { name: 'ICE',         col: '#2ce8f5', desc: 'NORMAL FIREWALLS GET A SMALL ICE RULE.' },
   { name: 'HONEYNET',    col: '#feae34', desc: 'SHOP PRICES +$1. REROLLS START AT $3.' },
   { name: 'TRACE',       col: '#ff3df2', desc: 'EVERY 3RD BUST RAISES THE TARGET BY 10%.' },
-  { name: 'SINGULARITY', col: '#4dff88', desc: 'ONLY 9 ROLLS. BOSSES ALSO BRING AN ICE RULE.' },
+  { name: 'SINGULARITY', col: '#4dff88', desc: '9 ROLLS. BOSSES ALSO BRING AN ICE RULE.' },
 ];
 // small rules for ICE (stake 5+): normal firewalls, and bosses on SINGULARITY
 const ICE = {

@@ -734,15 +734,15 @@ function drawSetup() {
   btns.push({ x: TX + 4, y: cy0 + 24, w: 18, h: 15, label: '<', act: () => setupMove(-1, 0), ...UI.BTN.blue });
   btns.push({ x: TX + TW - 22, y: cy0 + 24, w: 18, h: 15, label: '>', act: () => setupMove(1, 0), ...UI.BTN.blue });
   // stake selector
-  const sy = cy0 + 72;
+  const sy = cy0 + 68;
   btns.push({ x: CX - 92, y: sy, w: 18, h: 13, label: '<', act: () => setupMove(0, -1), ...UI.BTN.blue });
   btns.push({ x: CX + 74, y: sy, w: 18, h: 13, label: '>', act: () => setupMove(0, 1), ...UI.BTN.blue });
   rect(CX - 68, sy + 3, 7, 7, st.col);
   text('STAKE ' + setup.stake + ': ' + st.name, CX + 4, sy + 3, stOpen ? st.col : '#5a5478', { align: 'center' });
-  const stakeNote = stOpen ? st.desc + (setup.stake > 1 ? ' (PLUS EVERYTHING BELOW)' : '')
-    : !open ? 'UNLOCK THIS RIG FIRST'
-    : 'LOCKED: BEAT ' + STAKES[setup.stake - 2].name + ' WITH THIS RIG';
-  text(stakeNote, CX, sy + 18, stOpen ? '#a99be0' : PAL.red, { align: 'center' });
+  // the stake's own rule on line 1 (every desc fits one line), '+ ALL STAKES BELOW' on line 2
+  const stakeNote = stOpen ? st.desc : !open ? 'UNLOCK THIS RIG FIRST' : 'LOCKED: BEAT ' + STAKES[setup.stake - 2].name + ' WITH THIS RIG';
+  text(stakeNote, CX, sy + 15, stOpen ? '#c9c3ea' : PAL.red, { align: 'center' });
+  if (stOpen && setup.stake > 1) text('+ ALL STAKES BELOW', CX, sy + 24, '#6b5fa8', { align: 'center' });
   btns.push({ x: CX - 50, y: TY + TH - 19, w: 100, h: 14, label: 'START RUN >', act: setupStart, ...UI.BTN.green, disabled: !stOpen });
   btns.forEach((b, i) => UI.button(b, hoverBtn === i));
 }
