@@ -630,5 +630,88 @@ function botStep() {
   opts[r]();
 }
 
-return { enter, update, render, onPointer, onKey, hot, isOpen, debugOpen: openPack, botStep };
+// ---- balance sim: a "sensible player" shopper (?bot=smart). For every option it plays a few hundred
+// simulated rolls with and without the item and buys whatever raises expected score per firewall most per dollar.
+// It never fires exploits (so it doesn't buy them) and ignores pure-economy items, so it's a slight underestimate.
+let botRerolls = 0, botSell = -1;
+const clone = o => JSON.parse(JSON.stringify(o));
+function seeded(seed) { return () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+/** Expected score of one firewall's worth of rolls with build r (same random dice for every option compared). */
+function botValue(r, fw = 40) {
+  const rnd = Math.random; Math.random = seeded(12345);
+  let total = 0;
+  try {
+    const rolls = Math.max(1, rollsPerRound(r));
+    for (let f = 0; f < fw; f++) {
+      let prevKey = null;
+      for (let k = 1; k <= rolls; k++) {
+        const w = dieWeights(r);
+        const faces = [0, 1, 2, 3, 4].map(i => rollFace(dieWeightsFor(r, i, w)));
+        const phantom = wildsOf(r, 'phantom').length || r.rig === 'phantom' ? rollFace(w) : 0;
+        const sc = scoreRoll(r, faces, { first: k === 1, last: k === rolls, prevKey, rollsRound: k, scoreBefore: 0, phantom });
+        let chips = sc.base.chips, mult = sc.base.mult;
+        for (let i = 0; i < 5; i++) {
+          const m = dieMod(r, i), v = sc.vals[i];
+          if (m === 'stone') chips += 50;
+          if (m === 'chrome' && !sc.scoring[i]) mult += 3;
+          if (v == null) continue;
+          chips += v;
+          if (dieSticker(r, i) === 'red') chips += v;
+          if (!sc.scoring[i]) continue;
+          if (m === 'neon') chips += 15; else if (m === 'glass') mult *= 2; else if (m === 'prism') mult *= 1.5;
+          else if (m === 'lucky') mult += 4; else if (m === 'ember') mult += 3;
+        }
+        for (const st of sc.steps) { if (st.kind === 'chips') chips += st.amt; else if (st.kind === 'mult') mult += st.amt; else mult *= st.amt; }
+        total += Math.round(chips * mult);
+        prevKey = sc.key;
+      }
+    }
+  } finally { Math.random = rnd; }
+  return total / fw;
+}
+const freeDie = (r, it) => { const arr = it.kind === 'sticker' ? r.dieStickers : r.dieMods; const k = (arr || []).findIndex(x => !x); return k < 0 ? 0 : k; };
+/** Value gain of adding item it (best replacement if the wildcard row is full). Returns { gain, sell }. */
+function botGain(it, v0) {
+  if (it.kind === 'exploit') return { gain: -1, sell: -1 };
+  const add = (r, c) => { if (c.kind === 'diemod' || c.kind === 'sticker') c.target = freeDie(r, c); applyItem(r, c); return r; };
+  if (it.kind === 'wild' && run.wilds.length >= wildSlots(run)) {
+    let best = { gain: -1, sell: -1 };
+    run.wilds.forEach((_, j) => { const r = clone(run); r.wilds.splice(j, 1); const g = botValue(add(r, clone(it))) - v0; if (g > best.gain) best = { gain: g, sell: j }; });
+    return best;
+  }
+  return { gain: botValue(add(clone(run), clone(it))) - v0, sell: -1 };
+}
+function smartStep() {
+  if (faceFor) {   // LOADED: pick the face that scores best
+    let bf = 6, bv = -1;
+    for (let f = 1; f <= 6; f++) { const r = clone(run); r.perks.find(p => p.uid === faceFor.uid).stats.face = f; const v = botValue(r); if (v > bv) { bv = v; bf = f; } }
+    return chooseFace(bf);
+  }
+  if (dieFor) return dieFor.done(freeDie(run, dieFor.item));
+  if (swap) { const k = botSell >= 0 ? botSell : 0; botSell = -1; return swapSell(k); }
+  if (reveal && !reveal.done) return;
+  const v0 = botValue(run);
+  if (pack) {
+    if (pack.shown < pack.items.length || pack.picks <= 0) return;
+    let best = null;
+    pack.items.forEach((it, i) => { if (pack.picked.includes(i) || hacksFull(it)) return; const g = botGain(it, v0); if (!best || g.gain > best.gain) best = { ...g, i }; });
+    if (!best || best.gain <= v0 * 0.01) return closePack(true);
+    botSell = best.sell;
+    return pickFromPack(best.i);
+  }
+  let best = null;
+  items.forEach((it, i) => {
+    if (!it || money() < cost(it) || hacksFull(it)) return;
+    const g = botGain(it, v0), ratio = g.gain / cost(it);
+    if (g.gain > v0 * 0.03 && (!best || ratio > best.ratio)) best = { ...g, ratio, i };
+  });
+  if (best) { botSell = best.sell; return buy(best.i); }
+  const pk = packs.findIndex(p => !p.sold && money() >= PACKS[p.type].price);
+  if (pk >= 0) return buy(pk + 2);
+  if (botRerolls < 3 && money() >= rerollCost + 3) { botRerolls++; return reroll(); }
+  botRerolls = 0;
+  return leave();
+}
+
+return { enter, update, render, onPointer, onKey, hot, isOpen, debugOpen: openPack, botStep, smartStep };
 })();

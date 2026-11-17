@@ -17,6 +17,20 @@ bossKill = { boss: [times faced, % of those runs it ended] } (THE HOUSE keyed as
 
 Run one Chrome at a time: two headless instances in parallel hung on this machine.
 
+## Sensible-player bot (`&bot=smart`)
+
+`SHOP.smartStep` plays a few hundred simulated rolls with and without each option (same random dice for every
+option) and buys whatever raises expected score per firewall most per dollar; it opens packs, picks the best card,
+replaces its weakest wildcard when full, rerolls when rich, and picks the best LOADED face. It never fires exploits
+and ignores pure-economy items. ~0.3 s per run, so use n=500-1000.
+
+| stake | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| smart win % | 83.7 | 74.1 | 64.2 | 35.6 | 21.6 | 15.2 | 12.0 | 4.4 |
+
+Most stake 1-2 losses are at THE HOUSE (firewall 8). HONEYPOT is the outlier boss for good players (13% kill at
+stakes 1-2 where the next worst is 5%) because pairs are ~46% of rolls.
+
 ## Results (stock rig, 5000 runs/stake, Nov 2026, after boss wave 2 + tuning)
 
 | stake | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |

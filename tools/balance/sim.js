@@ -2,6 +2,7 @@
 (function () {
   const q = new URLSearchParams(location.search);
   const N = +q.get('n') || 10, rig = q.get('rig') || 'stock';
+  const SMART = q.get('bot') === 'smart';   // 'smart' = sensible shopper, default = random shopper
   const stakes = (q.get('stakes') || '1,2,3,4,5,6,7,8').split(',').map(Number);
   if (q.get('zd')) ZERO_DAY_RULE = q.get('zd');
   for (const [k, v] of q) if (k in KNOBS) KNOBS[k] = isNaN(+v) ? v : +v;   // ?traceEvery=2&greyHat=house3 ...
@@ -19,7 +20,7 @@
       while (f++ < CAP) {
         PLAY.update(DT);
         const m = PLAY.mode;
-        if (m === 'shop' && (shopT += DT) > 0.25) { shopT = 0; SHOP.botStep(); }
+        if (m === 'shop' && (shopT += DT) > 0.25) { shopT = 0; SMART ? SHOP.smartStep() : SHOP.botStep(); }
         if (m === 'failed' || m === 'won') break;
       }
       frames += f;
