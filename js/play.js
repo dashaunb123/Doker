@@ -642,7 +642,8 @@ function breach() {
   setMode('cleared');
   BOSS.defeat();
   const rows = [['BREACH REWARD', RULES.reward(run.round)]];
-  if (run.rollsLeft > 0 && stakeOf(run) < 4) rows.push(['UNUSED ROLLS X' + run.rollsLeft, run.rollsLeft]);
+  const rollPay = unusedRollPay(run);
+  if (rollPay > 0) rows.push(['UNUSED ROLLS X' + run.rollsLeft, rollPay]);
   if (run.ice === 'tax') rows.push(['ICE TAX', -2]);
   const intr = interestFor(run);
   if (intr > 0) rows.push(['COMPOUND INTEREST', intr]);

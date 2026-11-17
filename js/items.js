@@ -484,6 +484,16 @@ const ICE = {
 };
 const ICE_IDS = Object.keys(ICE);
 const stakeOf = run => run.stake || 1;
+// ZERO DAY (stake 4+) changes how unused rolls pay out at a breach. 'none' = no payout (current rule).
+let ZERO_DAY_RULE = 'none';
+function unusedRollPay(run) {
+  const n = run.rollsLeft;
+  if (n <= 0) return 0;
+  if (stakeOf(run) < 4) return n;
+  if (ZERO_DAY_RULE === 'half') return Math.floor(n / 2);
+  if (ZERO_DAY_RULE === 'cap3') return Math.min(3, n);
+  return 0;
+}
 const wildSlots = run => (run.rig === 'botnet' ? 6 : run.rig === 'burner' ? 4 : WILD_SLOTS);
 const exploitSlots = run => (run.rig === 'root' ? 3 : EXPLOIT_SLOTS);
 function targetFor(run, r) {

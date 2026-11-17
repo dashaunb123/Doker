@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DOKER</title>
+  <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body>
+  <div id="stage">
+    <canvas id="game"></canvas>
+    <div id="crt"></div>
+    <div id="vignette"></div>
+  </div>
+
+  <!-- plain scripts (no modules) so the game runs by double-clicking index.html -->
+  <script src="../../js/font.js"></script>
+  <script src="../../js/sprites.js"></script>
+  <script src="../../js/cardart.js"></script>
+  <script src="../../js/bossart.js"></script>
+  <script src="../../js/bossloom.js"></script>
+  <script src="../../js/audio.js"></script>
+  <script src="../../js/rules.js"></script>
+  <script src="../../js/items.js"></script>
+  <script src="../../js/ui.js"></script>
+  <script src="../../js/shop.js"></script>
+  <script src="../../js/boss.js"></script>
+  <script src="../../js/play.js"></script>
+  <script>window.requestAnimationFrame = () => 0;   // no render loop: the sim drives PLAY.update itself</script>
+  <script src="../../js/menu.js"></script>
+  <script src="sim.js"></script>
+</body>
+</html>

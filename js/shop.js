@@ -527,5 +527,29 @@ function onKey() {}
 const hot = () => hover >= 0 || (!!btns[hoverBtn] && !btns[hoverBtn].disabled);
 const isOpen = () => !!pack;
 
-return { enter, update, render, onPointer, onKey, hot, isOpen, debugOpen: openPack };
+// ------------------------------------------------------------
+//  dev / balance testing: a bot that shops completely at random
+// ------------------------------------------------------------
+let botActions = 0;
+function botStep() {
+  if (faceFor) return chooseFace(G.randi(1, 6));
+  if (dieFor) return dieFor.done(G.randi(0, 4));
+  if (swap) return swapSell(G.randi(0, run.wilds.length - 1));
+  if (reveal && !reveal.done) return;
+  if (pack) {
+    if (pack.shown < pack.items.length || pack.picks <= 0) return;           // still revealing / auto-closing
+    const open = pack.items.map((_, i) => i).filter(i => !pack.picked.includes(i) && !hacksFull(pack.items[i]));
+    if (!open.length) return closePack(true);
+    return pickFromPack(open[Math.floor(Math.random() * open.length)]);
+  }
+  if (++botActions > 12) { botActions = 0; return leave(); }
+  const opts = [];
+  items.forEach((it, i) => { if (it && money() >= cost(it) && !hacksFull(it)) opts.push(() => buy(i)); });
+  packs.forEach((p, k) => { if (!p.sold && money() >= PACKS[p.type].price) opts.push(() => buy(k + 2)); });
+  const r = Math.floor(Math.random() * (opts.length + 1));                   // every option, and leaving, equally likely
+  if (r === opts.length) { botActions = 0; return leave(); }
+  opts[r]();
+}
+
+return { enter, update, render, onPointer, onKey, hot, isOpen, debugOpen: openPack, botStep };
 })();
