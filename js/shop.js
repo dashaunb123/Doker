@@ -17,7 +17,7 @@ const GREET = ['WELCOME BACK. NO REFUNDS.', 'FRESH EXPLOITS. BARELY USED.', 'CAS
 const BUY   = ['PLEASURE DOING BUSINESS.', 'GOOD CHOICE. PROBABLY.', 'THAT ONE BITES.', 'NO RECEIPTS.'];
 const BROKE = ['COME BACK WITH MORE CREDITS.', 'NICE TRY. CREDITS FIRST.', 'YOUR WALLET SAYS NO.'];
 const RARE  = ['OOH. THAT ONE IS SPICY.', 'WHERE DID YOU FIND THAT?', 'NOW WE ARE TALKING.'];
-const TICK  = '*** BLACK MARKET *** *** PACKS: OPEN, DECRYPT, PICK *** REROLL FOR NEW SOFTWARE *** ';
+const TICK  = '*** BLACK MARKET *** *** PACKS: OPEN, DECRYPT, PICK *** REROLL FOR NEW SOFTWARE AND PACKS *** ';
 
 // ---------- state ----------
 let run = null, onDone = null, onSave = null, t = 0;
@@ -128,9 +128,10 @@ function reroll() {
   run.money -= rerollCost;
   rerollCost++;
   items = rollItems(2, ['perk', 'patch', 'wild', 'exploit', 'diemod']);
+  packs = [rollPackType(), rollPackType()].map(type => ({ type, sold: false }));   // packs restock too
   reveal = null;
   SFX.rollStart(); G.glitch(0.1);
-  say('NEW STOCK. SAME PRICES.');
+  say('NEW STOCK. NEW PACKS. SAME PRICES.');
   save();
 }
 
