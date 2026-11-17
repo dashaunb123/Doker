@@ -85,6 +85,7 @@ function swapSell(k) {
   if (!w) return;
   run.money += wildSell(w);
   run.wilds.splice(k, 1);
+  packWilds(run);
   SFX.coin();
   const done = swap.done;
   swap = null;
@@ -354,10 +355,20 @@ function drawDealer() {
 
 // ---- your wildcards, along the top of the shop (hover to read, click to sell / move) ----
 const SW_W = 40, SW_H = 28, SW_G = 6, SW_Y = 21;
-const swX = i => { const n = wildSlots(run); return Math.round(RCX - (n * SW_W + (n - 1) * SW_G) / 2) + i * (SW_W + SW_G); };
+const swSlotX = s => { const n = wildSlots(run); return Math.round(RCX - (n * SW_W + (n - 1) * SW_G) / 2) + s * (SW_W + SW_G); };
+const swX = i => swSlotX(wildSlotsOf(run)[i] ?? i);   // i = index in run.wilds (HOT POTATO may sit past empty slots)
 function drawShopWilds() {
   const { rect, rrect, ctx, T } = G;
-  for (let i = 0; i < wildSlots(run); i++) {
+  const pos = wildSlotsOf(run);
+  for (let s = 0; s < wildSlots(run); s++) {   // empty slot outlines
+    if (pos.includes(s)) continue;
+    const x = swSlotX(s);
+    ctx.globalAlpha = 0.45;
+    for (let k = 0; k < SW_W; k += 4) { rect(x + k, SW_Y, 2, 1, '#8a3bd4'); rect(x + k, SW_Y + SW_H - 1, 2, 1, '#8a3bd4'); }
+    for (let k = 0; k < SW_H; k += 4) { rect(x, SW_Y + k, 1, 2, '#8a3bd4'); rect(x + SW_W - 1, SW_Y + k, 1, 2, '#8a3bd4'); }
+    ctx.globalAlpha = 1;
+  }
+  for (let i = 0; i < run.wilds.length; i++) {
     const x = swX(i), w = run.wilds[i];
     if (!w) {
       ctx.globalAlpha = 0.45;
@@ -387,6 +398,7 @@ function sellShopWild() {
   if (!w) return;
   run.money += wildSell(w);
   run.wilds.splice(selW, 1);
+  packWilds(run);
   selW = -1;
   SFX.coin(); G.glitch(0.1);
   say(G.pick(['PLEASURE DOING BUSINESS.', "I'LL FIND IT A NEW HOME.", 'NO REFUNDS. BUT I BUY.']));
@@ -395,7 +407,7 @@ function sellShopWild() {
 function moveShopWild(dir) {
   const j = selW + dir;
   if (j < 0 || j >= run.wilds.length) return;
-  [run.wilds[selW], run.wilds[j]] = [run.wilds[j], run.wilds[selW]];
+  swapWilds(run, selW, j);
   selW = j;
   SFX.select();
   save();

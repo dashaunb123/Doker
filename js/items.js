@@ -377,7 +377,7 @@ function itemDesc(it, show, run) {
 function applyItem(run, it) {
   it.revealed = true;
   if (it.kind === 'perk') { run.perks.push(it); return; }
-  if (it.kind === 'wild') { (run.wilds = run.wilds || []).push(it); return; }
+  if (it.kind === 'wild') { (run.wilds = run.wilds || []).push(it); packWilds(run); return; }
   if (it.kind === 'exploit') { (run.exploits = run.exploits || []).push(it); return; }
   if (it.kind === 'diemod') { (run.dieMods = run.dieMods || [null, null, null, null, null])[it.target ?? 0] = it.id; return; }
   if (it.kind === 'sticker') { (run.dieStickers = run.dieStickers || [null, null, null, null, null])[it.target ?? 0] = it.id; return; }
@@ -504,6 +504,36 @@ function unusedRollPay(run) {
   return 0;
 }
 const wildSlots = run => (run.rig === 'botnet' ? 6 : run.rig === 'burner' ? 4 : WILD_SLOTS);
+
+// ---- wildcard row layout. run.wilds stays packed (no holes) and in left-to-right order, but a HOT POTATO
+// is pinned to the slot it has slid to (state.slot), so it can travel through empty slots; the rest pack left around it.
+/** Visual slot for each wildcard, by index in run.wilds. */
+function wildSlotsOf(run) {
+  const S = wildSlots(run), taken = [], out = [];
+  const near = s => { for (let d = 0; d < S; d++) { if (s + d < S && !taken[s + d]) return s + d; if (s - d >= 0 && !taken[s - d]) return s - d; } return 0; };
+  run.wilds.forEach((w, i) => {
+    if (w.id === 'hotpotato' && w.state && w.state.slot != null) { out[i] = near(Math.min(w.state.slot, S - 1)); taken[out[i]] = true; }
+  });
+  let s = 0;
+  run.wilds.forEach((w, i) => { if (out[i] != null) return; while (taken[s]) s++; out[i] = s; taken[s] = true; });
+  return out;
+}
+/** After any change to the row: pin new potatoes where they sit and sort run.wilds left to right (= trigger order). */
+function packWilds(run) {
+  if (!run.wilds) return;
+  const pos = wildSlotsOf(run);
+  run.wilds.forEach((w, i) => { if (w.id === 'hotpotato') (w.state = w.state || {}).slot = pos[i]; });
+  const order = run.wilds.map((w, i) => [pos[i], w]).sort((a, b) => a[0] - b[0]).map(o => o[1]);
+  run.wilds.splice(0, run.wilds.length, ...order);
+}
+/** MOVE buttons: swap two wildcards (a potato takes the other card's slot). */
+function swapWilds(run, k, j) {
+  const pos = wildSlotsOf(run), a = run.wilds[k], b = run.wilds[j];
+  if (a.id === 'hotpotato') a.state.slot = pos[j];
+  if (b.id === 'hotpotato') b.state.slot = pos[k];
+  run.wilds[k] = b; run.wilds[j] = a;
+  packWilds(run);
+}
 const exploitSlots = run => (run.rig === 'root' ? 3 : EXPLOIT_SLOTS);
 function targetFor(run, r) {
   const t = RULES.target(r) * (stakeOf(run) >= 3 ? 1.25 : 1) * (stakeOf(run) >= 2 && KNOBS.greyHat === 'boss6x' && (run.bosses || {})[r] ? 1.25 : 1);

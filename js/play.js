@@ -65,7 +65,10 @@ function loadSave() {
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } }
 
 const slotX = i => SX0 + i * (SLOT + GAP);
-const wildX = i => wildX0() + i * (WW + WG);
+const wslotX = s => wildX0() + s * (WW + WG);
+/** Where wildcard i (index in run.wilds) sits, mid-slide if it's moving. */
+const wildX = i => { const w = run.wilds[i], tx = wslotX(wildSlotsOf(run)[i] ?? i); return w && wildAnim.has(w.uid) ? Math.round(wildAnim.get(w.uid)) : tx; };
+const wildAnim = new Map();   // uid -> drawn x, eased toward the card's slot (cards slide when the row changes)
 const canEditWilds = () => mode === 'ready' || mode === 'intro';
 /** The look of die i at rest: its mod (gold/glass/neon/weighted) or plain bone. */
 const dieTheme = i => (run && dieMod(run, i)) || 'bone';
@@ -93,6 +96,7 @@ const bossHooks = {
 function removeWild(w) {
   const k = run.wilds.indexOf(w);
   if (k >= 0) run.wilds.splice(k, 1);
+  packWilds(run);
   selWild = -1;
 }
 function wildFloat(w, txt, col, big) {
@@ -145,7 +149,7 @@ function buildFelt() {
 function enter() {
   if (!felt) felt = buildFelt();
   enterT = 0;
-  parts = []; rings = []; floats = [];
+  parts = []; rings = []; floats = []; wildAnim.clear();
   dice = Array.from({ length: N }, (_, i) => ({
     face: i + 1, theme: 'bone', phase: 'idle', t: 0, delay: 0, final: 1, flipTo: 0, flips: 0,
     h: 0, sq: 1, sx: 1, sy: 1, jx: 0, flash: 0, pop: 0, trail: [], scoring: false, label: '', entered: false,
@@ -162,6 +166,7 @@ function continueRun() {
   if (!d) return false;
   run = d.run;
   run.wilds = run.wilds || [];
+  packWilds(run);
   run.exploits = run.exploits || [];
   run.dieMods = run.dieMods || [null, null, null, null, null];
   run.dieStickers = run.dieStickers || [null, null, null, null, null];
@@ -416,13 +421,21 @@ function startScoring() {
         floats.push({ x: CX, y: 104, txt: 'BACKDOOR: ROLL REFUNDED', col: PAL.green, life: 1.3 });
       }
     }
-    // HOT POTATO slides one slot right every roll and burns up off the end
-    const potatoes = run.wilds.filter(w => w.id === 'hotpotato');
-    for (const w of potatoes.reverse()) {
-      const k = run.wilds.indexOf(w);
-      if (k === run.wilds.length - 1) { wildFloat(w, 'BURNED UP', PAL.orange); removeWild(w); SFX.glitch(); }
-      else { [run.wilds[k], run.wilds[k + 1]] = [run.wilds[k + 1], run.wilds[k]]; }
+    // HOT POTATO slides one slot right every roll (through empty slots too) and burns up off the end of the row
+    packWilds(run);
+    const potatoes = run.wilds.filter(w => w.id === 'hotpotato').sort((a, b) => b.state.slot - a.state.slot);
+    for (const w of potatoes) {
+      if (w.state.slot >= wildSlots(run) - 1) {
+        const x = wildX(run.wilds.indexOf(w)) + WW / 2;
+        wildFloat(w, 'BURNED UP', PAL.orange); removeWild(w); wildAnim.delete(w.uid); SFX.glitch();
+        for (let k = 0; k < 16; k++) parts.push({ x: x + G.rand(-10, 10), y: WY + G.rand(2, WH - 2), vx: G.rand(-30, 90), vy: G.rand(-90, -10), life: G.rand(0.3, 0.8), col: G.pick([PAL.orange, PAL.gold, PAL.red]), s: Math.random() < 0.4 ? 2 : 1 });
+      } else {
+        const x = wildX(run.wilds.indexOf(w)) + WW;
+        w.state.slot += 1;
+        for (let k = 0; k < 6; k++) parts.push({ x: x - G.rand(0, 8), y: WY + G.rand(4, WH - 4), vx: G.rand(-60, -20), vy: G.rand(-30, 10), life: G.rand(0.25, 0.5), col: G.pick([PAL.orange, PAL.gold]), s: 1 });
+      }
     }
+    packWilds(run);
     // GLASS: 1 in 6 to shatter back into a plain die
     for (const i of glassHit) if (Math.random() < GLASS_BREAK) {
       run.dieMods[i] = null; dice[i].theme = 'bone'; dice[i].flash = 1;
@@ -952,6 +965,14 @@ function updateFx(dt) {
   }
   if (cur) { cur.cp = Math.max(0, cur.cp - dt * 5); cur.mp = Math.max(0, cur.mp - dt * 5); cur.tp = Math.max(0, cur.tp - dt * 3); }
   for (const [k, v] of badgePop) { if (v - dt * 3 <= 0) badgePop.delete(k); else badgePop.set(k, v - dt * 3); }
+  // wildcards glide to their slot (HOT POTATO sliding, sells, moves)
+  if (run) {
+    const pos = wildSlotsOf(run);
+    run.wilds.forEach((w, i) => {
+      const tx = wslotX(pos[i]), cur = wildAnim.has(w.uid) ? wildAnim.get(w.uid) : tx;
+      wildAnim.set(w.uid, Math.abs(tx - cur) < 0.5 ? tx : cur + (tx - cur) * Math.min(1, dt * 9));
+    });
+  }
   for (const p of parts) { p.vy += 420 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; }
   parts = parts.filter(p => p.life > 0);
   for (const r of rings) { r.r += 70 * dt; r.life -= dt * 2.6; }
@@ -1062,7 +1083,16 @@ function drawPerkTip() {
 // ------------------------------------------------------------
 function drawWildRow() {
   const { rect, rrect, text, ctx, T } = G;
-  for (let i = 0; i < wildSlots(run); i++) {
+  const pos = wildSlotsOf(run);
+  for (let s = 0; s < wildSlots(run); s++) {   // empty slot outlines
+    if (pos.includes(s)) continue;
+    const x = wslotX(s);
+    ctx.globalAlpha = 0.5;
+    for (let k = 0; k < WW; k += 4) { rect(x + k, WY, 2, 1, '#2f8f5f'); rect(x + k, WY + WH - 1, 2, 1, '#2f8f5f'); }
+    for (let k = 0; k < WH; k += 4) { rect(x, WY + k, 1, 2, '#2f8f5f'); rect(x + WW - 1, WY + k, 1, 2, '#2f8f5f'); }
+    ctx.globalAlpha = 1;
+  }
+  for (let i = 0; i < run.wilds.length; i++) {
     const x = wildX(i), w = run.wilds[i];
     if (!w) {
       ctx.globalAlpha = 0.5;
@@ -1195,7 +1225,7 @@ function drawWildPanel() {
 function moveWild(dir) {
   const k = selWild, j = k + dir;
   if (j < 0 || j >= run.wilds.length) return;
-  [run.wilds[k], run.wilds[j]] = [run.wilds[j], run.wilds[k]];
+  swapWilds(run, k, j);
   selWild = j;
   SFX.select();
   saveRun('round');
