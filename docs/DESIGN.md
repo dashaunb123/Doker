@@ -189,3 +189,34 @@ Packs are [built]. Shop pack odds: Perk 30, Patch 30, Mystery 20, each Mega 10.
 
 - Seeds and a daily run
 - Endless mode
+
+## 10. Roadmap — rigs, stakes and more content [agreed 2026-11-16]
+
+Order: content wave 1 (die mods, exploits, stickers) → wave 2 (perks, wildcards) → rigs + stakes →
+upgrades, new bosses, final boss THE HOUSE.
+
+**Rigs** (starting loadouts; winning unlocks the next): STOCK · BURNER (+1 roll, −1 wildcard slot) · WHALE ($20,
+shop +$1) · SCRIPT KIDDIE (random perk + exploit) · GOLDBUG (all dice GOLD, mods +$2) · GLASS CANNON (all dice GLASS)
+· BOTNET (6 wildcard slots + free common wildcard, perks +$1) · PHANTOM (permanent 6th ghost die, 8 rolls) · ROOT
+(3 exploit slots, starts with FORCE; unlock by winning any rig on stake 4).
+
+**Stakes** (cumulative difficulty per rig, sticker shows best beaten): WHITE HAT · GREY HAT (extra boss on round 6) ·
+BLACK HAT (targets +25%) · ZERO DAY (no unused-roll payout) · ICE (normal firewalls get a mini-boss rule) ·
+HONEYNET (shop +$1, rerolls start $3) · TRACE (every 3rd bust raises the target 10%) · SINGULARITY (9 rolls, bosses
+get a second rule).
+
+**Wave 1 — die mods (+8):** CHROME (+3 mult if NOT in the hand) · LUCKY (1/5 +20 mult, 1/15 +$10) · STONE (no
+face, always +50 chips, never in hands) · WILD (any face for hands) · TWIN (counts twice for pairs/kinds) · RUBBER
+(a 1 bounces and rerolls once) · PRISM (x1.5 mult when it scores) · EMBER (+1 mult per scoring hand in a row).
+**Die stickers** (stack with a mod): RED (chips trigger twice) · BLUE (+1 roll if part of a DOKER) · PURPLE (spawns
+an exploit when it scores in four of a kind or better).
+**Exploits (+8):** FLIP · SWAP · REROLL ONE · OVERWRITE · INJECT (+50 chips) · ROLLBACK (undo a bust, roll back) ·
+SIPHON ($ = dice total / 5) · PING (+1 level to the rolled hand).
+
+**Wave 2 — perks (+10):** BACKDOOR · SPEEDRUN · LOW ORBIT · HIGH ROLLER · CRON JOB · PATCH TUESDAY · CACHE HIT ·
+SIDE CHANNEL · STACK OVERFLOW · PIPELINE. **Wildcards (+13):** HOT POTATO · DOUBLE AGENT · CAPTCHA · SANDCASTLE ·
+SNAKE OIL · DEAD DROP · THE AUDITOR · ANTIVIRUS · GHOST PROTOCOL · HEX EDITOR · LATENCY · QUANTUM · SUDO.
+
+**Later:** upgrades (FIBER OPTIC, VPN, RAM UPGRADE, BOTNET LICENSE, SSD, OVERCLOCKED CPU) · bosses PHISHER, 2FA,
+KERNEL PANIC, TROJAN, BLACKOUT · final boss THE HOUSE (the Dealer unmasked) · hands SMALL STRAIGHT, PARITY, secret
+ROOT ACCESS (six of a kind).
