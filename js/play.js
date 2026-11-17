@@ -44,6 +44,8 @@ let felt = null;
 let auto = false;
 
 let pendingContinue = false;
+let dokerEv = null, forceFaces = null;          // the DOKER!! event (five of a kind): { t, face, parts }
+const DOKER_LEN = 3.6;
 
 // ---------- autosave (so a crash or a trip to the menu never wipes a run) ----------
 const SAVE_KEY = 'doker.save.v1';
@@ -192,6 +194,7 @@ function setMode(m) { mode = m; modeT = 0; btns = []; hoverBtn = prevHoverBtn = 
 function rollAll() {
   if (mode !== 'ready') return;
   selWild = -1;
+  if (MUSIC.name === 'doker') MUSIC.play(track());     // the party ends when you roll again
   run.rollsLeft--; run.rollsUsed++; run.rollsRound++;
   result = null; cur = null;
   setMode('rolling');
@@ -203,7 +206,8 @@ function rollAll() {
   const w = dieWeights(run);
   run.phantom = wildsOf(run, 'phantom').length ? rollFace(w) : 0;
   dice.forEach(d => (d.dropped = false));
-  const finals = dice.map(() => rollFace(w));
+  const finals = forceFaces ? forceFaces.slice() : dice.map(() => rollFace(w));
+  forceFaces = null;
   const flips = bitFlips(run, finals);
   if (run.ddosDie >= 0) delete flips[run.ddosDie];
   const freeze = BOSS.beforeRoll();
@@ -239,10 +243,12 @@ function startScoring() {
   BOSS.onScore(sc.key);
   if (sc.phantomUsed) at(0.05, () => wildsOf(run, 'phantom').forEach(w => { popPerk(w); wildFloat(w, 'GHOST ' + run.phantom, PAL.cyan); }));
 
-  let t = 0;
+  const isDoker = sc.key === 'doker';
+  let t = isDoker ? startDokerEvent(faces) : 0;
   at(t, () => {
     cur.chips = sc.base.chips; cur.mult = sc.base.mult; cur.cp = 1; cur.mp = 1;
     SFX.hand(h.tier);
+    if (!isDoker) VOICE.play(sc.key);          // the announcer calls the big hands
     if (h.tier >= 3) for (let i = 0; i < N; i++) if (dice[i].scoring) burst(i, 8, 1.4);
     if (h.tier >= 5) { G.flash(0.25); G.shake(3); }
     if (h.tier === 7) { G.glitch(0.7); G.flash(0.6); }
@@ -306,6 +312,97 @@ function startScoring() {
   at(t, endRoll);
 }
 
+/** DOKER!! — five of a kind stops the game: the logo slams in, the music changes, the announcer screams. */
+function startDokerEvent(faces) {
+  dokerEv = { t: 0, face: faces[0] || 6, parts: [], slammed: 0 };
+  MUSIC.play('doker');
+  VOICE.play('doker');
+  SFX.hand(7); SFX.glitch();
+  G.flash(1); G.shake(8); G.glitch(1);
+  return DOKER_LEN;
+}
+
+/** Click/space during the event: jump to its end (the scoring sequence catches up). */
+function skipDoker() {
+  const rem = DOKER_LEN - 0.3 - dokerEv.t;
+  if (rem > 0) { dokerEv.t += rem; seqT += rem; dokerEv.slammed = 5; }
+}
+
+function updateDokerEvent(dt) {
+  const e = dokerEv;
+  e.t += dt;
+  // letters slam in one by one
+  const due = Math.min(5, Math.floor((e.t - 0.35) / 0.17) + 1);
+  while (e.slammed < due) { SFX.slam(e.slammed); G.shake(5); e.slammed++; if (e.slammed === 5) { G.flash(0.6); SFX.breach(); } }
+  // fireworks
+  if (e.t > 1.0 && e.t < DOKER_LEN - 0.4 && Math.random() < dt * 9) {
+    const fx = G.rand(30, G.W - 30), fy = G.rand(30, 120), col = G.pick([PAL.magenta, PAL.cyan, PAL.gold, PAL.green, PAL.white]);
+    for (let k = 0; k < 22; k++) { const a = k / 22 * Math.PI * 2; e.parts.push({ x: fx, y: fy, vx: Math.cos(a) * G.rand(40, 110), vy: Math.sin(a) * G.rand(40, 110), life: G.rand(0.6, 1.1), col }); }
+    SFX.chip(Math.floor(Math.random() * 6));
+  }
+  for (const p of e.parts) { p.vy += 120 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; }
+  e.parts = e.parts.filter(p => p.life > 0);
+  if (e.t >= DOKER_LEN) dokerEv = null;
+}
+
+function drawDokerEvent() {
+  const e = dokerEv;
+  if (!e) return;
+  const { ctx, rect, text, W, H, T, clamp, easeOutBack } = G;
+  const t = e.t;
+  const a = Math.min(clamp(t / 0.15, 0, 1), clamp((DOKER_LEN - t) / 0.35, 0, 1));
+  const cx = W / 2, cy = 84;
+  ctx.globalAlpha = 0.9 * a; rect(0, 0, W, H, '#05030c');
+  // spinning rainbow rays
+  const rays = ['#ff3df2', '#2ce8f5', '#feae34', '#4dff88'];
+  for (let k = 0; k < 28; k++) {
+    const ang = k / 28 * Math.PI * 2 + t * 0.9;
+    ctx.globalAlpha = 0.28 * a;
+    for (let r = 20; r < 260; r += 2) rect(Math.round(cx + Math.cos(ang) * r), Math.round(cy + Math.sin(ang) * r * 0.75), 2 + (r > 120 ? 1 : 0), 2, rays[k % 4]);
+  }
+  // the five dice orbit the logo
+  ctx.globalAlpha = a;
+  const spin = t * (5 - Math.min(3.5, t * 1.4));
+  for (let i = 0; i < 5; i++) {
+    const ang = i / 5 * Math.PI * 2 + spin;
+    const dx = cx + Math.cos(ang) * 150, dy = cy + 6 + Math.sin(ang) * 58;
+    const img = DIE.bone[e.face];
+    ctx.drawImage(img, Math.round(dx - 16), Math.round(dy - 16), 32, 32);
+  }
+  // DOKER logo slams in letter by letter
+  const imgs = [LOGO_GLYPH.D, LOGO_DIE[e.face], LOGO_GLYPH.K, LOGO_GLYPH.E, LOGO_GLYPH.R];
+  const S = 4, gap = 4;
+  const total = imgs.reduce((s2, im) => s2 + im.width * S, 0) + gap * 4;
+  let x = cx - total / 2;
+  imgs.forEach((im, i) => {
+    const lt = t - 0.35 - i * 0.17;
+    if (lt < 0) { x += im.width * S + gap; return; }
+    const p = easeOutBack(clamp(lt / 0.22, 0, 1));
+    const sc = S * (2.6 - 1.6 * p), w = im.width * sc, h = im.height * sc;
+    const bob = Math.round(Math.sin(T * 7 + i * 0.9) * 2 * clamp(lt - 0.3, 0, 1));
+    const lx = Math.round(x + im.width * S / 2 - w / 2), ly = Math.round(cy - h / 2 + bob);
+    ctx.globalAlpha = a * 0.7;
+    const o = Math.round(1 + Math.abs(Math.sin(T * 13 + i)) * 3);
+    ctx.drawImage(tinted(im, PAL.cyan), lx - o, ly, w, h);
+    ctx.drawImage(tinted(im, PAL.magenta), lx + o, ly, w, h);
+    ctx.globalAlpha = a;
+    ctx.drawImage(im, lx, ly, w, h);
+    x += im.width * S + gap;
+  });
+  // !! and the subtitle
+  if (t > 1.3) {
+    const p = clamp((t - 1.3) / 0.25, 0, 1);
+    ctx.globalAlpha = a * p;
+    const col = rays[Math.floor(T * 10) % 4];
+    text('!!', cx + total / 2 + 12, cy - 18, col, { scale: 4, outline: PAL.ink });
+    text('FIVE OF A KIND', cx, cy + 40, PAL.white, { align: 'center', scale: 2, outline: PAL.ink, wave: 1, t: T });
+    text('THE HOUSE IS BROKEN', cx, cy + 62, col, { align: 'center', outline: PAL.ink });
+  }
+  // fireworks
+  for (const pp of e.parts) { ctx.globalAlpha = a * clamp(pp.life * 2, 0, 1); rect(Math.round(pp.x), Math.round(pp.y), 2, 2, pp.col); }
+  ctx.globalAlpha = 1;
+}
+
 function endRoll() {
   if (run.score >= run.target) breach();
   else if (run.rollsLeft <= 0) {
@@ -351,6 +448,7 @@ function nextFirewall() {
 
 function openShop(snap) {
   setMode('shop');
+  MUSIC.play(track());
   SHOP.enter(run, () => { G.glitch(0.3); startRound(run.round + 1); }, snapShop => saveRun('shop', { shop: snapShop }), snap);
 }
 
@@ -407,6 +505,7 @@ function update(dt) {
 
   if (mode === 'shop') { SHOP.update(dt); updateFx(dt); return; }
   BOSS.update(dt);
+  if (dokerEv) updateDokerEvent(dt);
 
   // ---- hover ----
   hover = -1; hoverBtn = -1; hoverPerk = -1; hoverWild = -1; hoverWBtn = -1;
@@ -928,6 +1027,7 @@ function render() {
       CX, 153, run.rollsLeft === 1 ? PAL.red : PAL.gold, { align: 'center', shadow: PAL.ink });
 
   G.drawTicker(TICK);
+  drawDokerEvent();
   BOSS.drawCut();
 }
 
@@ -938,6 +1038,7 @@ function onPointer() {
   if (menuHover) { SFX.select(); G.goTo('menu'); return; }
   if (mode === 'shop') { SHOP.onPointer(); return; }
   if (mode === 'bossintro') { BOSS.skip(); return; }
+  if (dokerEv) { skipDoker(); return; }
   if (hoverBtn >= 0 && btns[hoverBtn]) { btns[hoverBtn].act(); return; }
   if (wbtns[hoverWBtn]) { const b = wbtns[hoverWBtn]; hoverWBtn = -1; if (b.disabled) SFX.deny(); else b.act(); return; }
   if (hoverWild >= 0 && canEditWilds()) { selWild = selWild === hoverWild ? -1 : hoverWild; SFX.select(); return; }
@@ -950,6 +1051,7 @@ function onKey(k) {
   if (mode === 'shop') { SHOP.onKey(k); return; }
   if (k !== ' ' && k !== 'enter') return;
   if (mode === 'bossintro') { BOSS.skip(); return; }
+  if (dokerEv) { skipDoker(); return; }
   selWild = -1;
   if (isOverlay()) { if (btns[0]) btns[0].act(); return; }
   if (mode === 'intro' && enterT > 1) { setMode('ready'); return; }
@@ -963,6 +1065,8 @@ return {
   // dev hooks for testing
   get run() { return run; },
   debugShop() { openShop(null); },
+  /** dev: force the next roll to be five of a kind */
+  debugDoker(face = 6) { forceFaces = [face, face, face, face, face]; },
   track,
   debugRound(r, boss) { if (boss) run.bosses[r] = boss; startRound(r); },
   hasSave: () => !!loadSave(),

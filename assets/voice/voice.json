@@ -1,0 +1,49 @@
+{
+ "voice_id": "2gNQCpOJUWjOI8M0d2Y9",
+ "name": "DOKER Arcade Announcer",
+ "from_generated_id": "2gNQCpOJUWjOI8M0d2Y9",
+ "lines": {
+  "straight": [
+   "straight_1.mp3",
+   "straight_2.mp3",
+   "straight_3.mp3"
+  ],
+  "full": [
+   "full_1.mp3",
+   "full_2.mp3",
+   "full_3.mp3"
+  ],
+  "four": [
+   "four_1.mp3",
+   "four_2.mp3",
+   "four_3.mp3"
+  ],
+  "doker": [
+   "doker_1.mp3",
+   "doker_2.mp3",
+   "doker_3.mp3"
+  ]
+ },
+ "texts": {
+  "straight": [
+   "[excited] STRAIGHT!",
+   "[excited] STRAIGHT! [laughs]",
+   "[shouting] STRAIGHT!"
+  ],
+  "full": [
+   "[excited] FULL HOUSE!",
+   "[excited] FULL HOUSE! Oh yeah!",
+   "[shouting] FULL HOUSE!"
+  ],
+  "four": [
+   "[shouting] FOUR OF A KIND!",
+   "[excited] FOUR OF A KIND! Unbelievable!",
+   "[shouting] [excited] FOUR OF A KIND!"
+  ],
+  "doker": [
+   "[shouting] [excited] DOKERRRRRRRRRRRRRRRRRRR!!!",
+   "[shouting] FIVE OF A KIND... [shouting] [excited] DOKERRRRRRRRRRRRRR!!!",
+   "[shouting] [excited] D-D-D-DOKERRRRRRRRRRRRRRRR!!!"
+  ]
+ }
+}

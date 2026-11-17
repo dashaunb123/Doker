@@ -177,6 +177,24 @@ const MUSIC = {
       ],
     },
 
+    // DOKER!! — five of a kind takes over the room: euphoric, fast, everything at once (G major, 168 bpm)
+    doker: {
+      bpm: 168,
+      chords: [[55, 59, 62, 67], [52, 55, 59, 64], [48, 52, 55, 60], [50, 54, 57, 62]],
+      kick: [0, 4, 8, 12], snare: [4, 12], kickVol: 0.5, snareVol: 0.2,
+      hat: [0.03, 0.03, 0.04, 0.03, 0.03, 0.03, 0.04, 0.03, 0.03, 0.03, 0.04, 0.03, 0.03, 0.03, 0.04, 0.04],
+      perc: [2, 6, 10, 14], percHz: 4000, percVol: 0.06,
+      bass: [0, 12, 0, 12, 0, 12, 0, 12, 0, 12, 0, 12, 0, 12, 7, 12], bassType: 'square', bassVol: 0.09, bassLen: 0.9,
+      arp: [0, 1, 2, 3, 2, 1, 2, 3], arpOct: 2, arpVol: 0.03,
+      leadAlways: true, leadType: 'square', leadVol: 0.05, leadLen: 1.6,
+      lead: [
+        [79, _, 83, _, 86, _, 91, _, 86, _, 83, _, 86, _, 88, _],
+        [88, _, 86, _, 83, _, 79, _, 83, _, 86, _, 88, _, 91, _],
+        [84, _, 88, _, 91, _, 96, _, 91, _, 88, _, 91, _, 93, _],
+        [93, _, 91, _, 90, _, 86, _, 90, _, 93, _, 95, _, 98, _],
+      ],
+    },
+
     // ---- boss themes: each boss firewall has its own track ----
     // DDOS / THE FLOOD — relentless and pounding, a flood of repeated notes (D phrygian, 150 bpm)
     boss_ddos: {
@@ -285,6 +303,17 @@ const MUSIC = {
 
   toggle() { this.enabled = !this.enabled; },
 
+  /** Dip the music for a moment (so the announcer cuts through). */
+  duck(sec = 1.2, to = 0.18) {
+    if (!this.gain || !SFX.ac) return;
+    const g = this.gain.gain, t = SFX.ac.currentTime;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(to, t + 0.06);
+    g.setValueAtTime(to, t + sec);
+    g.linearRampToValueAtTime(0.6, t + sec + 0.5);
+  },
+
   tick() {
     const s = this.song;
     if (!s) return;
@@ -316,5 +345,31 @@ const MUSIC = {
       const n = s.lead[bar][st];
       if (n) SFX.tone(mtof(n), spb * (s.leadLen || 1.8), { ...o, type: s.leadType || 'square', vol: s.leadVol || 0.045, to: s.leadBend ? mtof(n - s.leadBend) : undefined });
     }
+  },
+};
+
+// ============================================================
+//  VOICE — the DOKER arcade announcer (ElevenLabs, voice "DOKER Arcade Announcer").
+//  Only the big hands get a call. Several takes per line so it doesn't repeat.
+//  Files live in assets/voice/ (see assets/voice/voice.json for the scripts).
+// ============================================================
+const VOICE = {
+  LINES: {"straight": ["straight_1.mp3", "straight_2.mp3", "straight_3.mp3"], "full": ["full_1.mp3", "full_2.mp3", "full_3.mp3"], "four": ["four_1.mp3", "four_2.mp3", "four_3.mp3"], "doker": ["doker_1.mp3", "doker_2.mp3", "doker_3.mp3"]},
+  last: {},
+  volume: 0.95,
+  /** Play a random take of a call: 'straight' | 'full' | 'four' | 'doker'. */
+  play(key) {
+    const list = this.LINES[key];
+    if (!list || SFX.muted) return;
+    let i = Math.floor(Math.random() * list.length);
+    if (list.length > 1 && i === this.last[key]) i = (i + 1) % list.length;
+    this.last[key] = i;
+    try {
+      const a = new Audio('assets/voice/' + list[i]);
+      a.volume = this.volume;
+      const p = a.play();
+      if (p && p.catch) p.catch(() => {});
+      MUSIC.duck(key === 'doker' ? 2.6 : 1.3);
+    } catch (e) { /* audio unavailable: stay silent */ }
   },
 };
