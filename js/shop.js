@@ -23,6 +23,7 @@ const TICK  = '*** BLACK MARKET *** *** PACKS: OPEN, DECRYPT, PICK *** REROLL FO
 let run = null, onDone = null, onSave = null, t = 0;
 let items = [], packs = [], rerollCost = 2;
 let hover = -1, prevHover = -1, hoverBtn = -1, prevHoverBtn = -1, btns = [];
+let hoverW = -1, prevHoverW = -1, selW = -1;      // your wildcards, shown along the top of the shop
 let quote = '', quoteT = 0, typed = 0;
 let reveal = null;          // { item, t, done, doneT }
 let faceFor = null;         // LOADED (legendary) waiting for the player to choose a face
@@ -46,7 +47,7 @@ function cost(it) {
 /** snap = a saved shop (from snapshot()) to restore instead of rolling fresh stock. */
 function enter(r, cb, saveCb, snap) {
   run = r; onDone = cb; onSave = saveCb || null; t = 0;
-  reveal = null; faceFor = null; pack = null; swap = null; dieFor = null;
+  reveal = null; faceFor = null; pack = null; swap = null; dieFor = null; selW = -1;
   if (snap) {
     items = snap.items; packs = snap.packs; rerollCost = snap.rerollCost;
     if (snap.pack) pack = { ...snap.pack, def: PACKS[snap.pack.type], t: 99, shown: snap.pack.items.length, flash: [] };
@@ -282,7 +283,8 @@ function update(dt) {
 
   // ---- hover ----
   const m = G.mouse;
-  hover = -1; hoverBtn = -1;
+  hover = -1; hoverBtn = -1; hoverW = -1;
+  if (selW >= 0 && (pack || swap || dieFor || faceFor || !run.wilds[selW])) selW = -1;
   if (m.inside) {
     btns.forEach((b, i) => { if (UI.hitBox(b, m.x, m.y)) hoverBtn = i; });
     if (hoverBtn < 0) {
@@ -300,6 +302,7 @@ function update(dt) {
             if (m.x >= x && m.x < x + PCW && m.y >= PCY - 6 && m.y < PCY + PCH) hover = i;
           });
       } else if (!faceFor) {
+        run.wilds.forEach((_, i) => { const x = swX(i); if (m.x >= x && m.x < x + SW_W && m.y >= SW_Y - 2 && m.y < SW_Y + SW_H) hoverW = i; });
         SLOTX.forEach((x, i) => {
           const live = i < 2 ? items[i] : !packs[i - 2].sold;
           if (live && m.x >= x && m.x < x + CW && m.y >= CY - 4 && m.y < CY + CH + 14) hover = i;
@@ -308,6 +311,8 @@ function update(dt) {
     }
   }
   if (hover !== prevHover && hover >= 0) SFX.hover();
+  if (hoverW !== prevHoverW && hoverW >= 0) SFX.hover();
+  prevHoverW = hoverW;
   if (hoverBtn !== prevHoverBtn && btns[hoverBtn] && !btns[hoverBtn].disabled) SFX.hover();
   prevHover = hover; prevHoverBtn = hoverBtn;
 }
@@ -347,14 +352,59 @@ function drawDealer() {
   rect(DX - 4, DY + 55, 56, 4, '#3a2a78');
 }
 
+// ---- your wildcards, along the top of the shop (hover to read, click to sell / move) ----
+const SW_W = 40, SW_H = 28, SW_G = 6, SW_Y = 21;
+const swX = i => { const n = wildSlots(run); return Math.round(RCX - (n * SW_W + (n - 1) * SW_G) / 2) + i * (SW_W + SW_G); };
+function drawShopWilds() {
+  const { rect, rrect, ctx, T } = G;
+  for (let i = 0; i < wildSlots(run); i++) {
+    const x = swX(i), w = run.wilds[i];
+    if (!w) {
+      ctx.globalAlpha = 0.45;
+      for (let k = 0; k < SW_W; k += 4) { rect(x + k, SW_Y, 2, 1, '#8a3bd4'); rect(x + k, SW_Y + SW_H - 1, 2, 1, '#8a3bd4'); }
+      for (let k = 0; k < SW_H; k += 4) { rect(x, SW_Y + k, 1, 2, '#8a3bd4'); rect(x + SW_W - 1, SW_Y + k, 1, 2, '#8a3bd4'); }
+      ctx.globalAlpha = 1;
+      continue;
+    }
+    const lift = hoverW === i || selW === i ? 2 : 0, y = SW_Y - lift, col = RARITY.col[w.rarity];
+    rrect(x - 1, y - 1, SW_W + 2, SW_H + 2, PAL.ink);
+    rrect(x, y, SW_W, SW_H, selW === i ? PAL.white : col);
+    rect(x + 1, y + 1, SW_W - 2, SW_H - 2, '#15112c');
+    const art = CARD_ART[w.id];
+    if (art) ctx.drawImage(art, x + Math.floor((SW_W - art.width) / 2), y + Math.floor((SW_H - art.height) / 2));
+    else G.text(WILD_DEFS[w.id].code, x + SW_W / 2, y + 10, col, { align: 'center' });
+    if (w.edition) UI.editionFx(w.edition, x, y, SW_W, SW_H);
+    if (selW === i) {
+      const e = 2 + Math.round(Math.abs(Math.sin(T * 8)));
+      rect(x - e, y - e, 5, 1, PAL.green); rect(x - e, y - e, 1, 5, PAL.green);
+      rect(x + SW_W + e - 5, y - e, 5, 1, PAL.green); rect(x + SW_W + e - 1, y - e, 1, 5, PAL.green);
+      rect(x - e, y + SW_H + e - 1, 5, 1, PAL.green); rect(x + SW_W + e - 5, y + SW_H + e - 1, 5, 1, PAL.green);
+    }
+  }
+}
+function sellShopWild() {
+  const w = run.wilds[selW];
+  if (!w) return;
+  run.money += wildSell(w);
+  run.wilds.splice(selW, 1);
+  selW = -1;
+  SFX.coin(); G.glitch(0.1);
+  say(G.pick(['PLEASURE DOING BUSINESS.', "I'LL FIND IT A NEW HOME.", 'NO REFUNDS. BUT I BUY.']));
+  save();
+}
+function moveShopWild(dir) {
+  const j = selW + dir;
+  if (j < 0 || j >= run.wilds.length) return;
+  [run.wilds[selW], run.wilds[j]] = [run.wilds[j], run.wilds[selW]];
+  selW = j;
+  SFX.select();
+  save();
+}
+
 function drawShopFloor() {
   const { text, T, rect } = G;
-  const flick = Math.random() < 0.04;
-  text('BLACK MARKET', RCX, 23, flick ? '#6b1f63' : PAL.magenta, { align: 'center', scale: 2, shadow: PAL.ink });
-  text('"' + quote.slice(0, typed) + '"', RCX, 40, PAL.green, { align: 'center' });
-
-  text('SOFTWARE', (SLOTX[0] + SLOTX[1] + CW) / 2, 50, '#8a7fc0', { align: 'center' });
-  text('PACKS', (SLOTX[2] + SLOTX[3] + CW) / 2, 50, '#8a7fc0', { align: 'center' });
+  drawShopWilds();
+  text('"' + quote.slice(0, typed) + '"', RCX, 52, PAL.green, { align: 'center' });
 
   SLOTX.forEach((x, i) => {
     const sh = shakeSlot === i && shakeT > 0 ? Math.round(Math.sin(shakeT * 80) * 2) : 0;
@@ -388,6 +438,15 @@ function scrambled(str) {
 }
 
 function drawInfo() {
+  const wk = hoverW >= 0 ? hoverW : selW;
+  if (!pack && !swap && !dieFor && !faceFor && wk >= 0 && run.wilds[wk]) {
+    const w = run.wilds[wk], col = RARITY.col[w.rarity];
+    const tag = (w.edition ? EDITIONS[w.edition].name + ' ' : '') + 'SELLS FOR $' + wildSell(w);
+    const lines = wrapText(itemDesc(w), Math.floor((IW - 8) / 6));
+    if (selW < 0) lines.push('CLICK TO SELL OR MOVE IT');
+    UI.infoBox(IX, IY, IW, IH, itemName(w), col, tag, w.edition ? EDITIONS[w.edition].col : PAL.gold, selW >= 0 ? lines.slice(0, 2) : lines, PAL.white);
+    return;
+  }
   const hovered = swap ? (hover >= 0 ? run.wilds[hover] : null)
     : pack ? (hover >= 0 ? pack.items[hover] : null) : (hover >= 0 && hover < 2 ? items[hover] : null);
   if (dieFor) {
@@ -486,6 +545,12 @@ function buildButtons() {
     }
     return;
   }
+  if (selW >= 0 && run.wilds[selW]) {
+    const w = run.wilds[selW];
+    btns.push({ x: IX + 4, y: IY + IH - 11, w: 52, h: 10, label: '< MOVE', act: () => moveShopWild(-1), ...UI.BTN.blue, disabled: selW === 0 });
+    btns.push({ x: IX + 60, y: IY + IH - 11, w: 52, h: 10, label: 'MOVE >', act: () => moveShopWild(1), ...UI.BTN.blue, disabled: selW === run.wilds.length - 1 });
+    btns.push({ x: IX + IW - 80, y: IY + IH - 11, w: 76, h: 10, label: 'SELL +$' + wildSell(w), act: sellShopWild, ...UI.BTN.red });
+  }
   btns.push({ x: 110, y: 182, w: 84, h: 13, label: 'REROLL $' + rerollCost, act: reroll, ...UI.BTN.blue, disabled: money() < rerollCost });
   btns.push({ x: 292, y: 182, w: 84, h: 13, label: 'JACK OUT >', act: leave, ...UI.BTN.green });
 }
@@ -519,12 +584,14 @@ function onPointer() {
   if (swap) { if (hover >= 0) swapSell(hover); return; }
   if (reveal && !reveal.done) return;
   if (pack) { if (hover >= 0 && pack.shown >= pack.items.length) pickFromPack(hover); return; }
-  if (hover >= 0) buy(hover);
+  if (hoverW >= 0) { selW = selW === hoverW ? -1 : hoverW; SFX.select(); return; }
+  if (hover >= 0) { selW = -1; buy(hover); return; }
+  if (selW >= 0) { selW = -1; SFX.select(); }      // click away = deselect
 }
 // no keyboard shortcut to leave: mashing space after a breach must not skip the shop
 function onKey() {}
 // btns is rebuilt every render, so hoverBtn can point past its end for a frame: always look it up safely
-const hot = () => hover >= 0 || (!!btns[hoverBtn] && !btns[hoverBtn].disabled);
+const hot = () => hover >= 0 || hoverW >= 0 || (!!btns[hoverBtn] && !btns[hoverBtn].disabled);
 const isOpen = () => !!pack;
 
 // ------------------------------------------------------------

@@ -124,8 +124,7 @@ Example: `index.html?play&perks=14&auto&ff=60`
 ## Next steps
 
 1. Playtest the sound/music levels and the overall balance (wildcards make runs much stronger — targets may need a bump).
-2. Wildcard follow-ups: drag-to-reorder (now click → MOVE buttons), wildcard sell from inside the shop
-   (now only via the slots-full prompt), more than 5 slots as a reward.
+2. Wildcard follow-ups: drag-to-reorder (now click → MOVE buttons).
 
 ## Announcer voice (ElevenLabs)
 
