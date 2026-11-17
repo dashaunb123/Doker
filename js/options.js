@@ -21,13 +21,14 @@ const ROWS = [
   { id: 'speed', label: 'GAME SPEED', type: 'enum', vals: [1, 1.5, 2, 3], names: ['1X', '1.5X', '2X', '3X'] },
   { id: 'bossIntro', label: 'BOSS INTROS', type: 'enum', vals: ['always', 'first'], names: ['ALWAYS', 'FIRST TIME'] },
   { h: 'MORE' },
+  { id: 'tutorial', label: 'TUTORIAL', type: 'action', btn: 'PLAY' },
   { id: 'controls', label: 'CONTROLS', type: 'action', btn: 'VIEW' },
   { id: 'reset', label: 'RESET PROGRESS', type: 'action', btn: 'RESET', danger: true },
   { id: 'back', label: '< BACK', type: 'back' },
 ];
 // lay the rows out once
-let yy = PY + 23;
-for (const r of ROWS) { if (r.type === 'back') yy += 3; r.y = yy; yy += r.h ? 10 : 11; }
+let yy = PY + 22;
+for (const r of ROWS) { if (r.type === 'back') yy += 2; r.y = yy; yy += r.h ? 9 : 10; }
 const PICK = ROWS.filter(r => !r.h);
 
 let sel = 0, hover = -1, kb = false, t = 0;
@@ -71,6 +72,7 @@ function activate(r) {
   if (r.type === 'action') {
     SFX.select();
     if (r.id === 'controls') overlay = 'controls';
+    if (r.id === 'tutorial') G.startTutorial();
     if (r.id === 'reset') { overlay = 'reset'; typed = ''; resetMsg = ''; wiped = 0; }
     return;
   }
@@ -92,7 +94,7 @@ function tryReset() {
 }
 
 // ---------- input ----------
-const rowAt = (x, y) => PICK.findIndex(r => x >= PX + 4 && x < PX + PW - 4 && y >= r.y - 2 && y < r.y + 10);
+const rowAt = (x, y) => PICK.findIndex(r => x >= PX + 4 && x < PX + PW - 4 && y >= r.y - 2 && y < r.y + 8);
 const inBox = (x, y, b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
 const OV = { x: 74, y: 40, w: 236, h: 132 };
 const RB = { cancel: { x: 100, y: 150, w: 80, h: 13 }, wipe: { x: 204, y: 150, w: 80, h: 13 } };
@@ -156,14 +158,14 @@ function drawRow(r, i) {
   const { rect, text, ctx } = G;
   const on = i === sel && (kb || hover === i);
   if (on) {
-    ctx.globalAlpha = 0.35; rect(PX + 4, r.y - 2, PW - 8, 11, r.danger ? PAL.dred : PAL.mgreen); ctx.globalAlpha = 1;
+    ctx.globalAlpha = 0.35; rect(PX + 4, r.y - 2, PW - 8, 10, r.danger ? PAL.dred : PAL.mgreen); ctx.globalAlpha = 1;
     if (Math.floor(t * 3) % 2 === 0) text('>', PX + 6, r.y, PAL.green);
   }
   if (r.type === 'back') { text(r.label, PX + 14, r.y, on ? PAL.white : PAL.grey); return; }
   text(r.label, PX + 14, r.y, r.danger ? '#ff6b75' : on ? PAL.white : '#c9c3ea');
   if (r.type === 'action') {
-    const bw = 44, bx = VC - bw / 2;
-    UI.button({ x: bx, y: r.y - 2, w: bw, h: 10, label: r.btn, ...(r.danger ? UI.BTN.red || UI.BTN.blue : UI.BTN.blue) }, on);
+    const col = r.danger ? (on ? '#ff6b75' : PAL.dred) : on ? PAL.white : '#7d9bff';
+    text('[ ' + r.btn + ' ]', VC, r.y, col, { align: 'center' });
     return;
   }
   arrow(VX0, r.y, -1, on);

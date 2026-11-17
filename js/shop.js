@@ -17,7 +17,7 @@ const GREET = ['WELCOME BACK. NO REFUNDS.', 'FRESH EXPLOITS. BARELY USED.', 'CAS
 const BUY   = ['PLEASURE DOING BUSINESS.', 'GOOD CHOICE. PROBABLY.', 'THAT ONE BITES.', 'NO RECEIPTS.'];
 const BROKE = ['COME BACK WITH MORE CREDITS.', 'NICE TRY. CREDITS FIRST.', 'YOUR WALLET SAYS NO.'];
 const RARE  = ['OOH. THAT ONE IS SPICY.', 'WHERE DID YOU FIND THAT?', 'NOW WE ARE TALKING.'];
-const TICK  = '*** BLACK MARKET *** *** PACKS: OPEN, DECRYPT, PICK *** REROLL FOR NEW SOFTWARE AND PACKS *** ';
+const TICK  = '*** BLACK MARKET *** NO REFUNDS *** CASH ONLY *** WHAT HAPPENS HERE STAYS ENCRYPTED *** ';
 
 // ---------- state ----------
 let run = null, onDone = null, onSave = null, t = 0;
@@ -714,5 +714,16 @@ function smartStep() {
   return leave();
 }
 
-return { enter, update, render, onPointer, onKey, hot, isOpen, debugOpen: openPack, botStep, smartStep };
+/** Tutorial: is the shop mid-action (revealing, pack open, picking a die)? And where things are. */
+const busy = () => !!pack || !!dieFor || !!faceFor || !!swap || !!(reveal && !reveal.done);
+const ui = {
+  slot: i => ({ x: SLOTX[i] - 3, y: CY - 6, w: CW + 6, h: CH + 16 }),
+  reroll: { x: 108, y: 180, w: 88, h: 19 }, leave: { x: 290, y: 180, w: 88, h: 19 },
+  wilds: () => { const n = wildSlots(run), w = n * SW_W + (n - 1) * SW_G; return { x: Math.round(RCX - w / 2) - 3, y: SW_Y - 3, w: w + 6, h: SW_H + 6 }; },
+  packCard: i => [packCardX(i) + PCW / 2, PCY + PCH / 2],   // (test harness)
+  dieCard: k => [dieCardX(k) + 20, DPY + 20],
+  get picking() { return !!dieFor; },
+};
+
+return { enter, update, render, onPointer, onKey, hot, isOpen, debugOpen: openPack, botStep, smartStep, busy, ui };
 })();
