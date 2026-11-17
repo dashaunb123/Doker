@@ -12,12 +12,22 @@ cv.width = W; cv.height = H;
 ctx.imageSmoothingEnabled = false;
 const stage = document.getElementById('stage');
 
+// Fill the window: scale as large as fits (keeping 16:9), snapped to whole device pixels.
+// (Whole-number-only scaling left a big black border at most window sizes.)
 function resize() {
-  let s = Math.floor(Math.min(innerWidth / W, innerHeight / H));
-  if (s < 1) s = Math.min(innerWidth / W, innerHeight / H);
-  stage.style.width = W * s + 'px';
-  stage.style.height = H * s + 'px';
+  const dpr = window.devicePixelRatio || 1;
+  const fit = Math.min(innerWidth / W, innerHeight / H);
+  const s = Math.max(1 / dpr, Math.floor(fit * W * dpr) / (W * dpr));
+  stage.style.width = Math.round(W * s) + 'px';
+  stage.style.height = Math.round(H * s) + 'px';
   document.documentElement.style.setProperty('--px', s + 'px');
+}
+/** F = true fullscreen on/off. */
+function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen();
+  } catch (e) { /* not allowed here */ }
 }
 addEventListener('resize', resize);
 resize();
@@ -616,7 +626,7 @@ function drawTerminal() {
 // ============================================================
 //  TICKER + CORNER INFO
 // ============================================================
-const TICKER = '*** WELCOME TO DOKER *** CLICK ANYWHERE TO THROW DICE *** FIVE OF A KIND PAYS 50X *** THE HOUSE ALWAYS WINS... UNLESS YOU HACK IT *** ARROWS + ENTER TO NAVIGATE *** M = MUTE   N = MUSIC   C = CRT ';
+const TICKER = '*** WELCOME TO DOKER *** CLICK ANYWHERE TO THROW DICE *** FIVE OF A KIND PAYS 50X *** THE HOUSE ALWAYS WINS... UNLESS YOU HACK IT *** ARROWS + ENTER TO NAVIGATE *** M = MUTE   N = MUSIC   C = CRT   F = FULLSCREEN ';
 function drawTicker(str = TICKER) {
   rect(0, 205, W, 11, PAL.ink);
   rect(0, 205, W, 1, PAL.purple);
@@ -952,6 +962,7 @@ addEventListener('keydown', e => {
   if (k === 'm') { SFX.muted = !SFX.muted; return; }
   if (k === 'n') { MUSIC.toggle(); return; }
   if (k === 'c') { document.body.classList.toggle('nocrt'); return; }
+  if (k === 'f') { toggleFullscreen(); return; }
   if (trans) return;
   if (state === 'play') { if (k === ' ' || k === 'enter') e.preventDefault(); return PLAY.onKey(k); }
   if (menuT < 1) return;

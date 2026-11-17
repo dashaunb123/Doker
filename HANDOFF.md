@@ -10,7 +10,7 @@ sound — is generated in code. No build step, no dependencies, no assets.
 Double-click `index.html` (any modern browser). Sound starts after the first click/key.
 
 Controls: mouse, or **Space** = roll · **Esc** = back to menu · **M** = mute all ·
-**N** = music on/off · **C** = CRT scanlines on/off.
+**N** = music on/off · **C** = CRT scanlines on/off · **F** = fullscreen.
 
 ## What's built
 
