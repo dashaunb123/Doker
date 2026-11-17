@@ -107,11 +107,11 @@ function itemCard(it, x, y, w, h, o = {}) {
   rrect(x, y, w, h, col);
   rect(x + 1, y + 1, w - 2, h - 2, '#15112c');
   rect(x + 1, y + 1, w - 2, 9, col);
-  text({ perk: 'PERK', wild: 'WILD', exploit: 'HACK', patch: 'PATCH' }[it.kind], x + w / 2, y + 2, PAL.ink, { align: 'center' });
+  text({ perk: 'PERK', wild: 'WILD', exploit: 'HACK', patch: 'PATCH', diemod: 'DICE' }[it.kind], x + w / 2, y + 2, PAL.ink, { align: 'center' });
 
   const code = itemCode(it);
   const jit = r === 5 && Math.random() < 0.15 ? (Math.random() < 0.5 ? -2 : 2) : 0;
-  const art = it.kind === 'patch' ? CARD_ART[it.key] : CARD_ART[it.id];
+  const art = CARD_ART[artKey(it)];
   if (art) {
     const ax = Math.round(x + (w - art.width) / 2), ay = y + 11 + Math.max(0, Math.floor((h - 27 - art.height) / 2));
     if (r === 5 && jit) { ctx.globalAlpha = 0.6; G.blit(tinted(art, PAL.cyan), ax - jit, ay); ctx.globalAlpha = 1; }

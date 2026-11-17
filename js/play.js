@@ -64,6 +64,8 @@ function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /*
 const slotX = i => SX0 + i * (SLOT + GAP);
 const wildX = i => WX0 + i * (WW + WG);
 const canEditWilds = () => mode === 'ready' || mode === 'intro';
+/** The look of die i at rest: its mod (gold/glass/neon/weighted) or plain bone. */
+const dieTheme = i => (run && dieMod(run, i)) || 'bone';
 /** Which music should be playing: the boss's own track while it's alive. */
 const track = () => (run && run.boss && BOSS.active() && mode !== 'shop' ? 'boss_' + run.boss : 'table');
 /** What the boss actor (js/boss.js) is allowed to touch on the table. */
@@ -150,6 +152,8 @@ function continueRun() {
   run = d.run;
   run.wilds = run.wilds || [];
   run.exploits = run.exploits || [];
+  run.dieMods = run.dieMods || [null, null, null, null, null];
+  dice.forEach((dd, i) => (dd.theme = dieTheme(i)));
   if (!run.bosses) { run.bosses = rollBosses(); run.boss = bossOf(run); }
   // keep new item ids unique past the restored ones
   for (const p of run.perks) if (p.uid > _uid) _uid = p.uid;
@@ -170,7 +174,7 @@ function continueRun() {
 function newRun() {
   run = {
     round: 0, target: 0, score: 0, rollsLeft: 0, rollsRound: 0, money: RULES.START_MONEY, rollsUsed: 0,
-    levels: {}, bonus: {}, perks: [], wilds: [], hot: 0, pity: 0, prevKey: null, hotShieldUsed: false, phantom: 0, seenKeys: [], exploits: [],
+    levels: {}, bonus: {}, perks: [], wilds: [], hot: 0, pity: 0, prevKey: null, hotShieldUsed: false, phantom: 0, seenKeys: [], exploits: [], dieMods: [null, null, null, null, null],
     bosses: rollBosses(), boss: null, ddosDie: -1,
   };
   startRound(1);
@@ -186,7 +190,7 @@ function startRound(r) {
   run.rollsLeft = rollsPerRound(run);
   run.rollsRound = 0;
   result = null; cur = null; reward = null; seq = []; seqT = 0;
-  dice.forEach(d => (d.scoring = false));
+  dice.forEach((d, i) => { d.scoring = false; d.theme = dieTheme(i); });
   BOSS.setup(run, bossHooks);
   if (run.boss) { setMode('bossintro'); BOSS.intro(() => setMode('ready')); }
   else { setMode('intro'); if (r > 1) SFX.whoosh(); }
@@ -219,7 +223,7 @@ function launchDice() {
   const w = dieWeights(run);
   run.phantom = wildsOf(run, 'phantom').length ? rollFace(w) : 0;
   dice.forEach(d => (d.dropped = false));
-  const finals = forceFaces ? forceFaces.slice() : dice.map(() => rollFace(w));
+  const finals = forceFaces ? forceFaces.slice() : dice.map((_, i) => rollFace(dieWeightsFor(run, i, w)));
   forceFaces = null;
   const flips = bitFlips(run, finals);
   if (run.ddosDie >= 0) delete flips[run.ddosDie];
@@ -246,6 +250,7 @@ function startScoring() {
   cur = { proto: h.proto, lv, col: h.col, chips: 0, mult: 0, total: 0, showTotal: false, cp: 0, mp: 0, tp: 0 };
   dice.forEach((d, i) => { d.scoring = sc.scoring[i]; d.dropped = sc.vals[i] == null; });
   setMode('scoring');
+  const glassHit = [];      // glass dice that fired this roll (they may shatter afterwards)
   // rule-benders announce themselves on the dice
   sc.notes.forEach(n => at(0.05, () => floats.push({ x: dieX(n.i), y: SY - 16, txt: n.txt, col: PAL.magenta, life: 1.2 })));
   if (sc.dropped >= 0) at(0.05, () => { floats.push({ x: dieX(sc.dropped), y: SY - 16, txt: 'DROPPED', col: '#8a7fc0', life: 1.2 }); wildsOf(run, 'packetloss').forEach(popPerk); });
@@ -271,6 +276,11 @@ function startScoring() {
       cur.chips += v; cur.cp = 1;
       floats.push({ x: dieX(i), y: SY - 8, txt: '+' + v, col: '#7d9bff', life: 0.9 });
       SFX.chip(i);
+      // die mods fire when this die is part of the hand
+      const mod = sc.scoring[i] ? dieMod(run, i) : null;
+      if (mod === 'neon') { cur.chips += 15; cur.cp = 1; floats.push({ x: dieX(i), y: SY - 18, txt: '+15', col: PAL.green, life: 1 }); }
+      if (mod === 'gold') { run.money += 1; floats.push({ x: dieX(i), y: SY - 18, txt: '+$1', col: PAL.gold, life: 1 }); SFX.coin(); }
+      if (mod === 'glass') { cur.mult *= 2; cur.mp = 1; glassHit.push(i); floats.push({ x: dieX(i), y: SY - 18, txt: 'X2', col: PAL.cyan, life: 1, big: true }); SFX.xmult(); }
     });
     t += 0.13;
   }
@@ -312,6 +322,13 @@ function startScoring() {
   t += 0.75;
   at(t, () => {
     run.score = Math.max(0, run.score + cur.total); SFX.coin(); afterRoll(run, sc.key, faces);
+    // GLASS: 1 in 6 to shatter back into a plain die
+    for (const i of glassHit) if (Math.random() < GLASS_BREAK) {
+      run.dieMods[i] = null; dice[i].theme = 'bone'; dice[i].flash = 1;
+      for (let k = 0; k < 18; k++) parts.push({ x: dieX(i) + G.rand(-12, 12), y: REST - G.rand(4, 30), vx: G.rand(-120, 120), vy: G.rand(-160, -20), life: G.rand(0.4, 0.9), col: G.pick(['#bfeff5', '#ffffff', '#7fc4d6']), s: Math.random() < 0.4 ? 2 : 1 });
+      floats.push({ x: dieX(i), y: SY - 8, txt: 'SHATTERED', col: PAL.cyan, life: 1.3 });
+      SFX.glitch(); G.shake(3);
+    }
     if (run.score < run.target) BOSS.react(sc.key);
     // CRYPTO MINER pays out for every 6
     const sixes = faces.filter(f => f === 6).length;
@@ -543,7 +560,7 @@ function burst(i, n, up) {
 }
 
 function land(d, i) {
-  Object.assign(d, { phase: 'land', t: 0, h: 0, trail: [], face: d.final, theme: 'bone', flash: 1, sq: 1, jx: 0 });
+  Object.assign(d, { phase: 'land', t: 0, h: 0, trail: [], face: d.final, theme: dieTheme(i), flash: 1, sq: 1, jx: 0 });
   G.shake(1.5 + i * 0.5);
   SFX.slam(i);
   burst(i, 16);
@@ -653,8 +670,8 @@ function update(dt) {
       const k = Math.floor(ph / Math.PI + 0.5);
       if (k !== d.flips) {
         d.flips = k;
-        if (k >= FLIPS) { d.face = d.final; d.theme = 'bone'; }
-        else { d.face = G.randi(1, 6); d.theme = Math.random() < 0.35 ? 'hack' : 'bone'; }
+        if (k >= FLIPS) { d.face = d.final; d.theme = dieTheme(i); }
+        else { d.face = G.randi(1, 6); d.theme = Math.random() < 0.35 ? 'hack' : dieTheme(i); }
         SFX.flipTick(k + i);
       }
       d.jx = Math.sin(p * Math.PI * 3) * 2;
@@ -871,6 +888,14 @@ function drawExploits() {
       G.blitC(DIE.bone[b.face], b.x + b.w / 2, b.y + b.h / 2, 1);
     } else UI.button(b, hoverHB === i);
   });
+}
+
+function drawDieTip() {
+  if (mode !== 'ready' || hover < 0 || hoverX >= 0) return;
+  const mod = dieMod(run, hover);
+  if (!mod) return;
+  const def = DIEMOD_DEFS[mod], col = RARITY.col[def.rarity];
+  UI.infoBox(TX + 4, 114, TW - XS_W - 14, 50, def.name + ' (DIE ' + (hover + 1) + ')', col, 'DIE MOD', col, def.desc + ' CLICK TO ROLL.', PAL.white);
 }
 
 function drawExploitTip() {
@@ -1167,6 +1192,7 @@ function render() {
   BOSS.drawCage();
   drawPerkTip();
   drawExploitTip();
+  drawDieTip();
   if (!isOverlay()) drawWildPanel(); else wbtns = [];
   if (isOverlay()) BOSS.drawActor();
   drawOverlay();
@@ -1175,7 +1201,7 @@ function render() {
   if (!isOverlay()) BOSS.drawActor();   // the boss's hands grip the table over the top bar
   drawFloats();
 
-  if (mode === 'ready' && hoverPerk < 0 && hoverWild < 0 && selWild < 0 && Math.floor(T * 2) % 2 === 0)
+  if (mode === 'ready' && hoverPerk < 0 && hoverWild < 0 && selWild < 0 && !(hover >= 0 && dieMod(run, hover)) && Math.floor(T * 2) % 2 === 0)
     text(run.rollsLeft === 1 ? 'LAST ROLL!' : run.rollsRound === 0 ? 'CLICK ANY DIE TO ROLL' : 'ROLL AGAIN',
       CX, 153, run.rollsLeft === 1 ? PAL.red : PAL.gold, { align: 'center', shadow: PAL.ink });
 
@@ -1228,6 +1254,7 @@ return {
   get run() { return run; },
   debugShop() { openShop(null); },
   get dbg() { return { mode, dice, hack }; },
+  debugMods(ids) { ids.forEach((id, i) => { if (DIEMOD_DEFS[id] && i < 5) { run.dieMods[i] = id; dice[i].theme = id; } }); },
   debugExploits(ids) { ids.forEach(id => EXPLOIT_DEFS[id] && run.exploits.length < EXPLOIT_SLOTS && applyItem(run, makeExploit(id))); },
   /** dev: force the next roll to be five of a kind */
   debugDoker(face = 6) { forceFaces = [face, face, face, face, face]; },

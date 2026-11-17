@@ -182,24 +182,43 @@ const EXPLOIT_IDS = Object.keys(EXPLOIT_DEFS);
 const EXPLOIT_SLOTS = 2;
 function makeExploit(id) { return { kind: 'exploit', id, uid: ++_uid, rarity: EXPLOIT_DEFS[id].rarity, revealed: false }; }
 
+// ---------- die mods (a permanent upgrade bolted onto one of your five dice) ----------
+// Effects fire when that die is part of the scoring hand (WEIGHTED changes how it rolls instead).
+const DIEMOD_DEFS = {
+  neon:     { name: 'NEON DIE',     code: 'NEO', rarity: 0, price: 4, desc: '+15 CHIPS WHEN THIS DIE SCORES.' },
+  gold:     { name: 'GOLD DIE',     code: 'GLD', rarity: 1, price: 5, desc: '+$1 EVERY TIME THIS DIE SCORES.' },
+  weighted: { name: 'WEIGHTED DIE', code: 'WGT', rarity: 1, price: 5, desc: 'THIS DIE ROLLS 4, 5 AND 6 MORE OFTEN.' },
+  glass:    { name: 'GLASS DIE',    code: 'GLS', rarity: 2, price: 6, desc: 'X2 MULT WHEN THIS DIE SCORES. 1 IN 6 CHANCE TO SHATTER AFTER.' },
+};
+const DIEMOD_IDS = Object.keys(DIEMOD_DEFS);
+const GLASS_BREAK = 1 / 6;
+function makeDieMod(id) { return { kind: 'diemod', id, uid: ++_uid, rarity: DIEMOD_DEFS[id].rarity, revealed: false }; }
+const dieMod = (run, i) => (run.dieMods || [])[i] || null;
+
 // ---------- item helpers ----------
 function itemName(it) {
+  if (it.kind === 'diemod') return DIEMOD_DEFS[it.id].name;
   if (it.kind === 'wild') return WILD_DEFS[it.id].name;
   if (it.kind === 'exploit') return EXPLOIT_DEFS[it.id].name;
   return it.kind === 'perk' ? PERK_DEFS[it.id].name : HANDS[it.key].proto + ' PATCH';
 }
 function itemCode(it) {
+  if (it.kind === 'diemod') return DIEMOD_DEFS[it.id].code;
   if (it.kind === 'wild') return WILD_DEFS[it.id].code;
   if (it.kind === 'exploit') return EXPLOIT_DEFS[it.id].code;
   return it.kind === 'perk' ? PERK_DEFS[it.id].code : PATCH_CODE[it.key];
 }
 function itemPrice(it) {
+  if (it.kind === 'diemod') return DIEMOD_DEFS[it.id].price;
   if (it.kind === 'wild') return WILD_DEFS[it.id].price + (it.edition ? EDITIONS[it.edition].price : 0);
   if (it.kind === 'exploit') return EXPLOIT_DEFS[it.id].price;
   return RARITY.price[it.rarity];
 }
+/** Which CARD_ART icon an item uses. */
+function artKey(it) { return it.kind === 'patch' ? it.key : it.kind === 'diemod' ? 'mod_' + it.id : it.id; }
 /** Short line under the art on a card. */
 function itemShort(it) {
+  if (it.kind === 'diemod') return it.target != null ? 'DIE ' + (it.target + 1) : 'DIE MOD';
   if (it.kind === 'wild') return it.edition ? EDITIONS[it.edition].name : '';
   if (it.kind === 'exploit') return '1 USE';
   if (it.kind === 'patch') return '+' + PATCH_BOOST[it.rarity].lv + ' LV';
@@ -220,6 +239,7 @@ function perkShort(it) {
 }
 
 function itemDesc(it, show, run) {
+  if (it.kind === 'diemod') return DIEMOD_DEFS[it.id].desc + (it.target != null ? ' ON DIE ' + (it.target + 1) + '.' : ' YOU PICK WHICH DIE.');
   if (it.kind === 'exploit') return EXPLOIT_DEFS[it.id].desc + ' USE IT AFTER THE DICE LAND, BEFORE THEY SCORE.';
   if (it.kind === 'wild') {
     let d = WILD_DEFS[it.id].desc(it.state);
@@ -250,6 +270,7 @@ function applyItem(run, it) {
   if (it.kind === 'perk') { run.perks.push(it); return; }
   if (it.kind === 'wild') { (run.wilds = run.wilds || []).push(it); return; }
   if (it.kind === 'exploit') { (run.exploits = run.exploits || []).push(it); return; }
+  if (it.kind === 'diemod') { (run.dieMods = run.dieMods || [null, null, null, null, null])[it.target ?? 0] = it.id; return; }
   const b = PATCH_BOOST[it.rarity];
   run.levels[it.key] = (run.levels[it.key] ?? 1) + b.lv;
   const bonus = (run.bonus[it.key] = run.bonus[it.key] || { chips: 0, mult: 0 });
@@ -265,13 +286,14 @@ function applyItem(run, it) {
 const PACKS = {
   perk:      { name: 'PERK CACHE',        lines: ['PERK', 'CACHE'],     price: 4, show: 3, pick: 1, pool: ['perk'],          col: '#7a3bd4', boost: 1 },
   patch:     { name: 'PATCH BUNDLE',      lines: ['PATCH', 'BUNDLE'],   price: 4, show: 4, pick: 1, pool: ['patch'],         col: '#2f5fd0', boost: 1 },
-  mystery:   { name: 'MYSTERY PAYLOAD',   lines: ['MYSTERY', 'PAYLOAD'],price: 6, show: 5, pick: 1, pool: ['perk', 'patch', 'wild', 'exploit'], col: '#c42fa8', boost: 1 },
+  mystery:   { name: 'MYSTERY PAYLOAD',   lines: ['MYSTERY', 'PAYLOAD'],price: 6, show: 5, pick: 1, pool: ['perk', 'patch', 'wild', 'exploit', 'diemod'], col: '#c42fa8', boost: 1 },
+  dicelab:   { name: 'DICE LAB',          lines: ['DICE', 'LAB'],       price: 5, show: 3, pick: 1, pool: ['diemod'],        col: '#b87a1a', boost: 1 },
   exploit:   { name: 'EXPLOIT KIT',       lines: ['EXPLOIT', 'KIT'],    price: 4, show: 3, pick: 1, pool: ['exploit'],       col: '#c43f1e', boost: 1 },
   wild:      { name: 'WILDCARD DROP',     lines: ['WILD', 'DROP'],      price: 6, show: 3, pick: 1, pool: ['wild'],          col: '#1e8c4f', boost: 1 },
   megaperk:  { name: 'MEGA PERK CACHE',   lines: ['MEGA', 'PERKS'],     price: 8, show: 6, pick: 2, pool: ['perk'],          col: '#7a3bd4', boost: 2, mega: true },
   megapatch: { name: 'MEGA PATCH BUNDLE', lines: ['MEGA', 'PATCHES'],   price: 8, show: 6, pick: 2, pool: ['patch'],         col: '#2f5fd0', boost: 2, mega: true },
 };
-const PACK_WEIGHTS = [['perk', 24], ['patch', 24], ['wild', 20], ['exploit', 16], ['mystery', 14], ['megaperk', 5], ['megapatch', 5]];
+const PACK_WEIGHTS = [['perk', 22], ['patch', 22], ['wild', 18], ['exploit', 14], ['dicelab', 14], ['mystery', 12], ['megaperk', 5], ['megapatch', 5]];
 const SKIP_REWARD = 2;
 
 function rollPackType() {
@@ -286,7 +308,11 @@ function rollItems(n, pool, boost = 1) {
   for (let i = 0; i < n; i++) {
     const kind = _pick(pool);
     const r = RARITY.roll(boost);
-    if (kind === 'exploit') {
+    if (kind === 'diemod') {
+      let t = Math.random() * DIEMOD_IDS.reduce((a, e) => a + RARITY.weights[DIEMOD_DEFS[e].rarity] ** 0.5, 0), id = DIEMOD_IDS[0];
+      for (const e of DIEMOD_IDS) if ((t -= RARITY.weights[DIEMOD_DEFS[e].rarity] ** 0.5) < 0) { id = e; break; }
+      out.push(makeDieMod(id));
+    } else if (kind === 'exploit') {
       // cheaper hacks show up more often
       let t = Math.random() * EXPLOIT_IDS.reduce((a, e) => a + RARITY.weights[EXPLOIT_DEFS[e].rarity] ** 0.5, 0), id = EXPLOIT_IDS[0];
       for (const e of EXPLOIT_IDS) if ((t -= RARITY.weights[EXPLOIT_DEFS[e].rarity] ** 0.5) < 0) { id = e; break; }
@@ -363,6 +389,12 @@ function dieWeights(run) {
     if (p.id === 'loaded') w[p.stats.face] *= 1 + p.stats.pct / 100;
     if (p.id === 'streak' && p.stats.stacks > 0) w[p.stats.face] *= 1 + (p.stats.pct * p.stats.stacks) / 100;
   }
+  return w;
+}
+/** Face weights for die i: the shared odds, plus WEIGHTED's lean toward 4-6. */
+function dieWeightsFor(run, i, base) {
+  const w = (base || dieWeights(run)).slice();
+  if (dieMod(run, i) === 'weighted') { w[4] *= 1.6; w[5] *= 1.8; w[6] *= 2; }
   return w;
 }
 function rollFace(w) {

@@ -28,6 +28,7 @@ let reveal = null;          // { item, t, done, doneT }
 let faceFor = null;         // LOADED (legendary) waiting for the player to choose a face
 let pack = null;            // open pack
 let swap = null;            // { item, done } — wildcard slots are full: pick one to sell first
+let dieFor = null;          // { item, done(k) } — a die mod is waiting for you to pick which die gets it
 let shakeSlot = -1, shakeT = 0, blinkT = 0, nextBlink = 2;
 
 const money = () => run.money;
@@ -35,13 +36,13 @@ const money = () => run.money;
 /** snap = a saved shop (from snapshot()) to restore instead of rolling fresh stock. */
 function enter(r, cb, saveCb, snap) {
   run = r; onDone = cb; onSave = saveCb || null; t = 0;
-  reveal = null; faceFor = null; pack = null; swap = null;
+  reveal = null; faceFor = null; pack = null; swap = null; dieFor = null;
   if (snap) {
     items = snap.items; packs = snap.packs; rerollCost = snap.rerollCost;
     if (snap.pack) pack = { ...snap.pack, def: PACKS[snap.pack.type], t: 99, shown: snap.pack.items.length, flash: [] };
     if (snap.faceFor) faceFor = run.perks.find(p => p.uid === snap.faceFor) || null;
   } else {
-    items = rollItems(2, ['perk', 'patch', 'wild', 'exploit']);
+    items = rollItems(2, ['perk', 'patch', 'wild', 'exploit', 'diemod']);
     packs = [rollPackType(), rollPackType()].map(type => ({ type, sold: false }));
     rerollCost = 2;
   }
@@ -87,6 +88,11 @@ function buy(i) {
     if (money() < itemPrice(it)) return broke(i);
     if (slotsFull(it)) return askSwap(it, () => buy(i));
     if (hacksFull(it)) return denyHack(i);
+    if (it.kind === 'diemod' && it.target == null) {
+      dieFor = { item: it, done: k => { it.target = k; dieFor = null; buy(i); } };
+      say('WHICH DIE GETS IT?'); SFX.select();
+      return;
+    }
     run.money -= itemPrice(it);
     items[i] = null;
     SFX.buy();
@@ -109,7 +115,7 @@ function reroll() {
   if (money() < rerollCost) return broke(-1);
   run.money -= rerollCost;
   rerollCost++;
-  items = rollItems(2, ['perk', 'patch', 'wild', 'exploit']);
+  items = rollItems(2, ['perk', 'patch', 'wild', 'exploit', 'diemod']);
   reveal = null;
   SFX.rollStart(); G.glitch(0.1);
   say('NEW STOCK. SAME PRICES.');
@@ -151,6 +157,35 @@ function openPack(type) {
   SFX.packOpen(); G.glitch(0.25); G.shake(2);
 }
 
+// ---- die-mod target picker ----
+const DPY = 70;
+const dieCardX = k => Math.round(RX + (RW - (5 * 40 + 4 * 12)) / 2 + k * 52);
+function drawDiePick() {
+  const { rect, rrect, text, ctx, T } = G;
+  ctx.globalAlpha = 0.95; rect(RX - 3, 20, RW + 6, 181, '#08061a'); ctx.globalAlpha = 1;
+  const it = dieFor.item, def = DIEMOD_DEFS[it.id];
+  text('PICK A DIE', RCX, 24, PAL.white, { align: 'center', scale: 2, outline: PAL.ink });
+  text('IT BECOMES A ' + def.name, RCX, 44, PAL.green, { align: 'center' });
+  for (let k = 0; k < 5; k++) {
+    const x = dieCardX(k), on = hover === k, y = DPY - (on ? 3 : 0);
+    const cur = dieMod(run, k);
+    rrect(x - 1, y - 1, 42, 50, on ? PAL.green : PAL.ink);
+    rrect(x, y, 40, 48, '#241a4a');
+    rect(x + 2, y + 2, 36, 44, '#0b0920');
+    // show the die as it is now, and (hovered) as it will be
+    const th = on ? it.id : (cur || 'bone');
+    ctx.drawImage(DIE[th][6], x + 4, y + 6, 32, 32);
+    text('DIE ' + (k + 1), x + 20, y + 40, '#8a7fc0', { align: 'center' });
+    if (cur && cur !== it.id) text(on ? 'REPLACES ' + DIEMOD_DEFS[cur].code : DIEMOD_DEFS[cur].code, x + 20, y + 52, on ? PAL.red : '#a99be0', { align: 'center' });
+    if (on) drawCorner(x, y, T);
+  }
+}
+function drawCorner(x, y, T) {
+  const e = 2 + Math.round(Math.abs(Math.sin(T * 8))), { rect } = G;
+  rect(x - e, y - e, 5, 1, PAL.green); rect(x - e, y - e, 1, 5, PAL.green);
+  rect(x + 40 + e - 5, y - e, 5, 1, PAL.green); rect(x + 40 + e - 1, y - e, 1, 5, PAL.green);
+}
+
 function swapCardX(i) {
   const n = run.wilds.length, gap = 10, total = n * PCW + (n - 1) * gap;
   return Math.round(RX + (RW - total) / 2 + i * (PCW + gap));
@@ -179,6 +214,12 @@ function pickFromPack(i) {
   if (pack.picks <= 0 || pack.picked.includes(i)) return;
   if (slotsFull(pack.items[i])) return askSwap(pack.items[i], () => pickFromPack(i));
   if (hacksFull(pack.items[i])) return denyHack(-1);
+  if (pack.items[i].kind === 'diemod' && pack.items[i].target == null) {
+    const it = pack.items[i];
+    dieFor = { item: it, done: k => { it.target = k; dieFor = null; pickFromPack(i); } };
+    say('WHICH DIE GETS IT?'); SFX.select();
+    return;
+  }
   pack.picked.push(i);
   pack.picks--;
   startReveal(pack.items[i]);
@@ -231,7 +272,9 @@ function update(dt) {
   if (m.inside) {
     btns.forEach((b, i) => { if (UI.hitBox(b, m.x, m.y)) hoverBtn = i; });
     if (hoverBtn < 0) {
-      if (swap) {
+      if (dieFor) {
+        for (let k = 0; k < 5; k++) { const x = dieCardX(k); if (m.x >= x && m.x < x + 40 && m.y >= DPY - 4 && m.y < DPY + 48) hover = k; }
+      } else if (swap) {
         run.wilds.forEach((_, i) => {
           const x = swapCardX(i);
           if (m.x >= x && m.x < x + PCW && m.y >= PCY - 6 && m.y < PCY + PCH) hover = i;
@@ -333,6 +376,12 @@ function scrambled(str) {
 function drawInfo() {
   const hovered = swap ? (hover >= 0 ? run.wilds[hover] : null)
     : pack ? (hover >= 0 ? pack.items[hover] : null) : (hover >= 0 && hover < 2 ? items[hover] : null);
+  if (dieFor) {
+    const it = dieFor.item, k = hover;
+    const body = DIEMOD_DEFS[it.id].desc + (k >= 0 && dieMod(run, k) && dieMod(run, k) !== it.id ? ' REPLACES THE ' + DIEMOD_DEFS[dieMod(run, k)].name + ' ON DIE ' + (k + 1) + '.' : '');
+    UI.infoBox(IX, IY, IW, IH, itemName(it), RARITY.col[it.rarity], '$' + itemPrice(it), PAL.gold, body, PAL.white);
+    return;
+  }
   if (swap && !hovered) {
     UI.infoBox(IX, IY, IW, IH, itemName(swap.item), RARITY.col[swap.item.rarity], 'INCOMING', PAL.green, itemDesc(swap.item, true, run), PAL.white);
     return;
@@ -402,6 +451,10 @@ function drawPack() {
 
 function buildButtons() {
   btns = [];
+  if (dieFor) {
+    btns.push({ x: 292, y: 182, w: 84, h: 13, label: 'CANCEL', act: () => { SFX.select(); dieFor = null; say('CHANGED YOUR MIND?'); }, ...UI.BTN.blue });
+    return;
+  }
   if (swap) {
     btns.push({ x: 292, y: 182, w: 84, h: 13, label: 'CANCEL', act: () => { SFX.select(); swap = null; say('SUIT YOURSELF.'); }, ...UI.BTN.blue });
     return;
@@ -427,6 +480,7 @@ function render() {
   if (pack) drawPack();
   else { drawDealer(); drawShopFloor(); }
   if (swap) drawSwap();
+  if (dieFor) drawDiePick();
   drawInfo();
   buildButtons();
   btns.forEach((b, i) => {
@@ -446,6 +500,7 @@ function onPointer() {
   const b = btns[hoverBtn];
   if (b) { hoverBtn = -1; if (b.disabled) return broke(-1); return b.act(); }
   if (faceFor) return;
+  if (dieFor) { if (hover >= 0) { SFX.buy(); dieFor.done(hover); } return; }
   if (swap) { if (hover >= 0) swapSell(hover); return; }
   if (reveal && !reveal.done) return;
   if (pack) { if (hover >= 0 && pack.shown >= pack.items.length) pickFromPack(hover); return; }

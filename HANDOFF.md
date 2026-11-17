@@ -28,12 +28,13 @@ Controls: mouse, or **Space** = roll · **Esc** = back to menu · **M** = mute a
 | Autosave + CONTINUE on the menu; crash guard keeps the game running after an error | Done |
 | Decluttered table (no slot labels under dice, no HOUSE OF BONES / TABLE text) | Done |
 | Wildcards: all 19 from DESIGN.md §6, 5 slots on the felt, sell/move, editions, Wildcard Drop pack, slots-full swap in shop | Done |
+| Die mods (NEON / GOLD / WEIGHTED / GLASS): permanent upgrades on one of your 5 dice; Dice Lab pack; die picker in the shop | Done |
 | Exploits (NUDGE / CLONE / NUKE / FORCE): 2 slots, fired in the HACK WINDOW after the dice land; Exploit Kit pack | Done |
 | Boss firewalls: rounds 4 + 8 get ENCRYPTION / LAG / SANDBOX / DDOS / HONEYPOT, warned one round early | Done |
 | Announcer voice (ElevenLabs) — only DOKER is voiced (user's call); straight/full/four takes kept in `assets/voice/` but unused | Done |
 | DOKER!! event (five of a kind): cutscene, DOKER party track, announcer scream | Done |
 | Boss characters (`js/boss.js`, sprites in `js/bossart.js`): intro cutscene, live on the felt, physically enforce their rule | Done |
-| Upgradable dice, starting rigs, Dealer reactions | Planned |
+| Starting rigs, Dealer reactions | Planned |
 | Extra hand types (Small Straight, Parity, Bookends) | Needs precedence rules first |
 | Seeds / daily run, endless mode | Parked |
 
@@ -81,6 +82,7 @@ Append to `index.html`:
 
 - `&wilds=dealer,mirror,botnet` — start with those wildcards (`&wilds=3` = 3 random); `&ed=holo` forces an edition
 
+- `&mods=gold,glass,neon,weighted` — put die mods on dice 1-5 (`-` skips a die)
 - `&exploits=force,nuke` — start holding those exploits (max 2)
 - `&doker` (or `&doker=4`) — the first roll is five of a kind, to see the DOKER!! event
 - `&round=4&boss=ddos` — jump to a firewall, optionally forcing its boss
@@ -106,6 +108,9 @@ Example: `index.html?play&perks=14&auto&ff=60`
   automatically. The DDOS die can't be targeted while the boss is alive; changing a padlocked 6 removes the lock
   (the 6 is no longer a 6). NUKE relaunches the dice without spending a roll (boss set-pieces run again).
   Buying with full slots is refused (no swap prompt, unlike wildcards).
+- Die mods: one per die (a new one replaces the old). NEON/GOLD/GLASS fire only when that die is part of the
+  scoring hand; GLASS doubles mult during the dice phase (before perks/wildcards) and has a 1 in 6 chance to
+  shatter back to a plain die. WEIGHTED multiplies that die's odds of 4/5/6 by 1.6/1.8/2 (~64% vs 50% high).
 
 ## Next steps
 

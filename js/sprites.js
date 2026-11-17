@@ -68,6 +68,11 @@ const FACES = {
 const DIE_THEMES = {
   bone: { body: '#f4f4f4', hi: '#ffffff', shade: '#b8b8c8', pip: '#e43b44', pipD: '#9e2835', out: PAL.ink },
   hack: { body: '#15122b', hi: '#2b2650', shade: '#0a0818', pip: '#4dff88', pipD: '#1e8c4f', out: '#4dff88' },
+  // die mods (permanent upgrades on one of your five dice)
+  gold:     { body: '#feae34', hi: '#fee761', shade: '#b87a1a', pip: '#5c3a08', pipD: '#3a2404', out: PAL.ink, deco: 'shine' },
+  glass:    { body: '#bfeff5', hi: '#ffffff', shade: '#7fc4d6', pip: '#1e6f8a', pipD: '#0f4a5e', out: '#2b5f7a', deco: 'glint' },
+  neon:     { body: '#0f1a24', hi: '#1d3340', shade: '#08101a', pip: '#4dff88', pipD: '#b6ffcc', out: '#2ce8f5', deco: 'glow' },
+  weighted: { body: '#5a5f6e', hi: '#8a90a0', shade: '#363a46', pip: '#feae34', pipD: '#b87a1a', out: PAL.ink, deco: 'rivets' },
 };
 
 function makeDie(face, th) {
@@ -90,13 +95,18 @@ function makeDie(face, th) {
     const x = PIP_POS[cx], y = PIP_POS[cy];
     px(x, y, th.pip); px(x + 1, y, th.pip); px(x, y + 1, th.pip); px(x + 1, y + 1, th.pipD);
   }
+  // little per-mod details
+  if (th.deco === 'glint') { px(3, 2, '#ffffff'); px(2, 3, '#ffffff'); px(4, 2, '#ffffff'); px(12, 12, '#e8fbff'); px(13, 11, '#e8fbff'); }
+  if (th.deco === 'shine') { px(2, 2, '#fff4c2'); px(3, 2, '#fff4c2'); px(2, 3, '#fff4c2'); px(13, 2, '#fff4c2'); }
+  if (th.deco === 'rivets') for (const [x, y] of [[2, 2], [13, 2], [2, 13], [13, 13]]) px(x, y, '#c9cdd8');
+  if (th.deco === 'glow') { px(2, 2, '#2ce8f5'); px(13, 13, '#2ce8f5'); }
   return c;
 }
 
-const DIE = { bone: [], hack: [] };
-for (let f = 1; f <= 6; f++) {
-  DIE.bone[f] = makeDie(f, DIE_THEMES.bone);
-  DIE.hack[f] = makeDie(f, DIE_THEMES.hack);
+const DIE = {};
+for (const th of Object.keys(DIE_THEMES)) {
+  DIE[th] = [];
+  for (let f = 1; f <= 6; f++) DIE[th][f] = makeDie(f, DIE_THEMES[th]);
 }
 
 // ------------------------------------------------------------
