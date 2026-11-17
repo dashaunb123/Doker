@@ -329,12 +329,20 @@ function itemShort(it) {
 function perkShort(it) {
   const s = it.stats;
   switch (it.id) {
-    case 'overclock': case 'lastcall': case 'echo': return 'X' + fmtMult(s.x);
+    case 'overclock': case 'lastcall': case 'echo': case 'cronjob': return 'X' + fmtMult(s.x);
     case 'hothand': return '+' + fmtMult(s.amt);
     case 'loaded': return s.face + ':+' + s.pct + '%';
     case 'inflation': return s.face + ':+' + s.amt;
     case 'streak': case 'bitflip': case 'interest': case 'recursion': return (it.id === 'streak' ? '+' : '') + s.pct + '%';
-    default: return '+' + s.amt;
+    case 'speedrun': return '+$' + s.amt;
+    case 'patchtuesday': return '-$' + s.amt;
+    case 'backdoor': return s.amt + ' FREE';
+    default:
+      // any other perk: show whatever number it has (+amt, Xmult or %), never "undefined"
+      if (s.amt != null) return '+' + s.amt;
+      if (s.x != null) return 'X' + fmtMult(s.x);
+      if (s.pct != null) return s.pct + '%';
+      return '';
   }
 }
 
