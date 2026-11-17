@@ -1154,5 +1154,115 @@ CARD_ART_DEFS.spoofer = {
   pal: { w: '#ffffff', e: '#e6e6ef', v: '#b9b3d6', u: '#8378b5', U: '#3e2a78', K: '#1c1033', g: '#ff3df2', G: '#9e1f96', t: '#f4f4f4', T: '#9a8fc2', A: '#9b7be8', a: '#6a4cc4', c: '#3f2b8a', P: '#ffffff', o: '#feae34', O: '#b87a1a' },
 };
 
+
+// ---- exploits ----
+CARD_ART_DEFS.nudge = {
+  rows: [
+    '......k............................',
+    '.....kak.....kkkkkkkkkkkkkk........',
+    '....kWabk...kkwwwwwwwwwwwvkk.......',
+    '...kWAabbk..kweeeeeeeeeeevdk.......',
+    '..kWAAabbbk.kweiieeeeeeeevdk.......',
+    '.kWAAAabbbbkkweijeeeeeeekvdk.......',
+    '.Wbbbbbccccckweeeeeeeeeekkdk.......',
+    '.kkkkkkkkkkkkweeeeiieeeekwkk.......',
+    '............kweeeeijeeeekwwk.......',
+    '............kweeeeeeeeeekwwwk......',
+    '............kweeeeeeeiiekwwwwk.....',
+    '............kweeeeeeeijekwwwwwk....',
+    '............kweeeeeeeeeekwwwwwak...',
+    '.kkkkkkkkkkkkweeeeeeeeeekwwwwwwak..',
+    '.AAAAAAaaaaCkvvvvvvvvvvvkwwwwkkkkk.',
+    '.kaaaabcccCkkkddddddddddkwakwwk....',
+    '..kaaabccCk..kkkkkkkkkkkkak.kwak...',
+    '...kaabcCk..............kk..kwak...',
+    '....kabCk....................kwak..',
+    '.....kbk.....................kwak..',
+    '......k.......................kk...',
+  ],
+  pal: { W: '#ffffff', A: '#d6feff', a: '#7ef3ff', b: '#2ce8f5', c: '#178a9e', C: '#0d4f66', d: '#6e6a8c', i: '#2e2260', j: '#4a4275' },
+};
+
+CARD_ART_DEFS.clone = {
+  rows: [
+    '.kkkkkkkkkkkkkk.....................',
+    'kkwwwwwwwwwwwvkk..G.g...............',
+    'kweeeeeeeeeeevdk......m.............',
+    'kweiieeeeeeeevdk....................',
+    'kweijeeeeeeeevdk.....kkkkkkkkkkkkkk.',
+    'kweeeeeeeeeeevdkmg..kkmmmmmmmmmmmGkk',
+    'kweeeeiieeeeevdk.mg.kmgggggggggggGZk',
+    'kweeeeijeeeeevdk..mgkmgZZggggggggGZk',
+    'kweeeeeeeeeeevdk..gmkmgZGggggggggGZk',
+    'kweeeeeeeiieevdk..gGkmgggggggggggGZk',
+    'kweeeeeeeijeevdk.gG.kmggggZZgggggGZk',
+    'kweeeeeeeeeeevdkgG..kmggggZGgggggGZk',
+    'kweeeeeeeeeeevdk....kmgggggggggggGZk',
+    'kvvvvvvvvvvvvvdk....kmgggggggZZggGZk',
+    'kkddddddddddddkk..kWWWWWWWWWWWWWWWWW',
+    '.kkkkkkkkkkkkkk....................G',
+    '....................g...............',
+    '...................................G',
+    '....................g...............',
+    '.....................G.G.G.G.G.G.G..',
+  ],
+  pal: { m: '#b6ffcc', g: '#4dff88', G: '#1e8c4f', Z: '#0f4d2b', W: '#f0fff4', d: '#6e6a8c', i: '#2e2260', j: '#4a4275' },
+};
+
+CARD_ART_DEFS.nuke = {
+  rows: [
+    '..............kkkYkkk.......kkkkk.',
+    '.kkkkk.......kyyyYYook.....kwwwwek',
+    'kwwwwek...kkkyyyYYYoorkkk..kwieevk',
+    'kwieevk..kyyrryyYYYoorrYYk.kweievk',
+    'kweeevk.kyyYYrrYYYoorrYYookkweeivk',
+    'kweeivkkyyyYrrrrrorrrrrYoorkevvvdk',
+    'kevvvdkkyYYrrYYorrrYYorroorkkkkkk.',
+    '.kkkkk.kYYYrYYoorrYYoorrorrk......',
+    '.......kYoorYooorrYooorrrRRk....o.',
+    '..Y.....koorooorRrooorRrRRk....Y..',
+    '.........kDDDDDDkkkDDDDDDk........',
+    '..........kkkkkyYorrkkkkk.........',
+    '..kkkkk..Y....kyYorrk....o..kkkkk.',
+    '.kwwwweko.....kyYorrk.....Ykwwwwek',
+    '.kwieivk......kyYorrk......kweeevk',
+    '.kweeevk....kkyYYoorrkk....kweievk',
+    '.kwieivkkkkkYkyYYoorrkokkkkkweeevk',
+    '.kevvvdkYoYYkyyYYoorrrkrrookevvvdk',
+    '..kkkkkYYoRooRRoorrrRRrrRorrkkkkk.',
+    '.....kooooRoororrrrrrrrrRorrrk....',
+    '.....korrrRrrrRrrrrrRrrrRrrrrk....',
+    '......krrrrrrrrkrrrkrrrrrrrrk.....',
+  ],
+  pal: { y: '#fff6b0', Y: '#fee761', o: '#feae34', r: '#f77622', R: '#c4342e', D: '#7a1f30', d: '#6e6a8c', i: '#2e2260' },
+};
+
+CARD_ART_DEFS.force = {
+  rows: [
+    '...kkkk................mWm.kkkk...',
+    '..kMMMmk................m.kmMMMk..',
+    '.kMmPkk...kkkkkkkkkkkkkk...kkPmMk.',
+    '.kMmPk...kkWWWWWWWWWWWFkk...kPmMk.',
+    '.kMmPk...kWfffffffffffFqk...kPmMk.',
+    '.kMmPk...kWfqqffffqqffFqk...kPmMk.',
+    '.kMmPk...kWfqPffffqPffFqk...kPmMk.',
+    '.kMmPk...kWfffffffffffFqk...kPmMk.',
+    'kMmPk....kWfqqffffqqffFqk....kPmMk',
+    'MmPk.....kWfqPffffqPffFqk.....kPmM',
+    'MmPk.....kWfffffffffffFqk.....kPmM',
+    'MmPk.mmmmWWWWWWWWWWWWWWWWWmmmmkPmM',
+    'kMmPk....kkweeeeeeeeeiivdk...kPmMk',
+    '.kMmPk....kweeeeeeeeeijvdk..kPmMk.',
+    '.kMmPk....kweeeeeeeeeeevdk..kPmMk.',
+    '.kMmPk....kvvvvvvvvvvvvvdk..kPmMk.',
+    '.kMmPk....kkddddddddddddkk..kPmMk.',
+    '.kMmPk.....kkkkkkkkkkkkkk...kPmMk.',
+    '.kMmPkk..m.................kkPmMk.',
+    '..kmPPPkmWm...............kPPPmk..',
+    '...kkkk..m.................kkkk...',
+  ],
+  pal: { M: '#ffc2fb', m: '#ff3df2', q: '#a3209b', W: '#ffe6fd', f: '#f5c4f0', F: '#c88ac6', P: '#7b2fd6', d: '#6e6a8c', i: '#2e2260', j: '#4a4275' },
+};
+
 const CARD_ART = {};
 for (const [k, d] of Object.entries(CARD_ART_DEFS)) CARD_ART[k] = makeSprite(d.rows, { ...ART_PAL, ...(d.pal || {}) });

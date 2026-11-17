@@ -171,22 +171,37 @@ function makeWild(id, edition = rollEdition()) {
 const wildsOf = (run, id) => (run.wilds || []).filter(w => w.id === id);
 const wildSell = w => Math.max(1, Math.floor(itemPrice(w) / 2));
 
+// ---------- exploits (single-use hacks, fired in the HACK WINDOW after the dice land) ----------
+const EXPLOIT_DEFS = {
+  nudge: { name: 'NUDGE', code: 'NDG', rarity: 0, price: 3, desc: 'MOVE ONE DIE UP OR DOWN BY 1.' },
+  clone: { name: 'CLONE', code: 'CLN', rarity: 1, price: 4, desc: 'COPY ONE DIE ONTO ANOTHER.' },
+  nuke:  { name: 'NUKE',  code: 'NUK', rarity: 2, price: 5, desc: "REROLL ALL FIVE DICE. DOESN'T COST A ROLL." },
+  force: { name: 'FORCE', code: 'FRC', rarity: 3, price: 7, desc: 'SET ONE DIE TO ANY FACE YOU WANT.' },
+};
+const EXPLOIT_IDS = Object.keys(EXPLOIT_DEFS);
+const EXPLOIT_SLOTS = 2;
+function makeExploit(id) { return { kind: 'exploit', id, uid: ++_uid, rarity: EXPLOIT_DEFS[id].rarity, revealed: false }; }
+
 // ---------- item helpers ----------
 function itemName(it) {
   if (it.kind === 'wild') return WILD_DEFS[it.id].name;
+  if (it.kind === 'exploit') return EXPLOIT_DEFS[it.id].name;
   return it.kind === 'perk' ? PERK_DEFS[it.id].name : HANDS[it.key].proto + ' PATCH';
 }
 function itemCode(it) {
   if (it.kind === 'wild') return WILD_DEFS[it.id].code;
+  if (it.kind === 'exploit') return EXPLOIT_DEFS[it.id].code;
   return it.kind === 'perk' ? PERK_DEFS[it.id].code : PATCH_CODE[it.key];
 }
 function itemPrice(it) {
   if (it.kind === 'wild') return WILD_DEFS[it.id].price + (it.edition ? EDITIONS[it.edition].price : 0);
+  if (it.kind === 'exploit') return EXPLOIT_DEFS[it.id].price;
   return RARITY.price[it.rarity];
 }
 /** Short line under the art on a card. */
 function itemShort(it) {
   if (it.kind === 'wild') return it.edition ? EDITIONS[it.edition].name : '';
+  if (it.kind === 'exploit') return '1 USE';
   if (it.kind === 'patch') return '+' + PATCH_BOOST[it.rarity].lv + ' LV';
   return it.revealed ? 'OK' : perkShort(it);
 }
@@ -205,6 +220,7 @@ function perkShort(it) {
 }
 
 function itemDesc(it, show, run) {
+  if (it.kind === 'exploit') return EXPLOIT_DEFS[it.id].desc + ' USE IT AFTER THE DICE LAND, BEFORE THEY SCORE.';
   if (it.kind === 'wild') {
     let d = WILD_DEFS[it.id].desc(it.state);
     if (it.edition) d += ` ${EDITIONS[it.edition].name}: ${EDITIONS[it.edition].text}`;
@@ -233,6 +249,7 @@ function applyItem(run, it) {
   it.revealed = true;
   if (it.kind === 'perk') { run.perks.push(it); return; }
   if (it.kind === 'wild') { (run.wilds = run.wilds || []).push(it); return; }
+  if (it.kind === 'exploit') { (run.exploits = run.exploits || []).push(it); return; }
   const b = PATCH_BOOST[it.rarity];
   run.levels[it.key] = (run.levels[it.key] ?? 1) + b.lv;
   const bonus = (run.bonus[it.key] = run.bonus[it.key] || { chips: 0, mult: 0 });
@@ -248,12 +265,13 @@ function applyItem(run, it) {
 const PACKS = {
   perk:      { name: 'PERK CACHE',        lines: ['PERK', 'CACHE'],     price: 4, show: 3, pick: 1, pool: ['perk'],          col: '#7a3bd4', boost: 1 },
   patch:     { name: 'PATCH BUNDLE',      lines: ['PATCH', 'BUNDLE'],   price: 4, show: 4, pick: 1, pool: ['patch'],         col: '#2f5fd0', boost: 1 },
-  mystery:   { name: 'MYSTERY PAYLOAD',   lines: ['MYSTERY', 'PAYLOAD'],price: 6, show: 5, pick: 1, pool: ['perk', 'patch', 'wild'], col: '#c42fa8', boost: 1 },
+  mystery:   { name: 'MYSTERY PAYLOAD',   lines: ['MYSTERY', 'PAYLOAD'],price: 6, show: 5, pick: 1, pool: ['perk', 'patch', 'wild', 'exploit'], col: '#c42fa8', boost: 1 },
+  exploit:   { name: 'EXPLOIT KIT',       lines: ['EXPLOIT', 'KIT'],    price: 4, show: 3, pick: 1, pool: ['exploit'],       col: '#c43f1e', boost: 1 },
   wild:      { name: 'WILDCARD DROP',     lines: ['WILD', 'DROP'],      price: 6, show: 3, pick: 1, pool: ['wild'],          col: '#1e8c4f', boost: 1 },
   megaperk:  { name: 'MEGA PERK CACHE',   lines: ['MEGA', 'PERKS'],     price: 8, show: 6, pick: 2, pool: ['perk'],          col: '#7a3bd4', boost: 2, mega: true },
   megapatch: { name: 'MEGA PATCH BUNDLE', lines: ['MEGA', 'PATCHES'],   price: 8, show: 6, pick: 2, pool: ['patch'],         col: '#2f5fd0', boost: 2, mega: true },
 };
-const PACK_WEIGHTS = [['perk', 26], ['patch', 26], ['wild', 22], ['mystery', 16], ['megaperk', 5], ['megapatch', 5]];
+const PACK_WEIGHTS = [['perk', 24], ['patch', 24], ['wild', 20], ['exploit', 16], ['mystery', 14], ['megaperk', 5], ['megapatch', 5]];
 const SKIP_REWARD = 2;
 
 function rollPackType() {
@@ -268,7 +286,12 @@ function rollItems(n, pool, boost = 1) {
   for (let i = 0; i < n; i++) {
     const kind = _pick(pool);
     const r = RARITY.roll(boost);
-    if (kind === 'wild') {
+    if (kind === 'exploit') {
+      // cheaper hacks show up more often
+      let t = Math.random() * EXPLOIT_IDS.reduce((a, e) => a + RARITY.weights[EXPLOIT_DEFS[e].rarity] ** 0.5, 0), id = EXPLOIT_IDS[0];
+      for (const e of EXPLOIT_IDS) if ((t -= RARITY.weights[EXPLOIT_DEFS[e].rarity] ** 0.5) < 0) { id = e; break; }
+      out.push(makeExploit(id));
+    } else if (kind === 'wild') {
       // rarer wildcards show up less: weight by rarity
       const fresh = WILD_IDS.filter(w => !usedWilds.includes(w));
       const opts = fresh.length ? fresh : WILD_IDS;

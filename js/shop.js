@@ -41,7 +41,7 @@ function enter(r, cb, saveCb, snap) {
     if (snap.pack) pack = { ...snap.pack, def: PACKS[snap.pack.type], t: 99, shown: snap.pack.items.length, flash: [] };
     if (snap.faceFor) faceFor = run.perks.find(p => p.uid === snap.faceFor) || null;
   } else {
-    items = rollItems(2, ['perk', 'patch', 'wild']);
+    items = rollItems(2, ['perk', 'patch', 'wild', 'exploit']);
     packs = [rollPackType(), rollPackType()].map(type => ({ type, sold: false }));
     rerollCost = 2;
   }
@@ -65,6 +65,8 @@ function say(s) { quote = s; quoteT = 0; typed = 0; SFX.talk(); }
 function broke(i) { say(G.pick(BROKE)); SFX.deny(); shakeSlot = i; shakeT = 0.3; }
 
 const slotsFull = it => it.kind === 'wild' && (run.wilds || []).length >= WILD_SLOTS;
+const hacksFull = it => it.kind === 'exploit' && (run.exploits || []).length >= EXPLOIT_SLOTS;
+function denyHack(i) { say('YOUR HANDS ARE FULL. USE AN EXPLOIT FIRST.'); SFX.deny(); shakeSlot = i; shakeT = 0.3; }
 function askSwap(it, done) { swap = { item: it, done }; say('NO ROOM. SELL ONE?'); SFX.deny(); }
 function swapSell(k) {
   const w = run.wilds[k];
@@ -84,6 +86,7 @@ function buy(i) {
     if (!it) return;
     if (money() < itemPrice(it)) return broke(i);
     if (slotsFull(it)) return askSwap(it, () => buy(i));
+    if (hacksFull(it)) return denyHack(i);
     run.money -= itemPrice(it);
     items[i] = null;
     SFX.buy();
@@ -106,7 +109,7 @@ function reroll() {
   if (money() < rerollCost) return broke(-1);
   run.money -= rerollCost;
   rerollCost++;
-  items = rollItems(2, ['perk', 'patch', 'wild']);
+  items = rollItems(2, ['perk', 'patch', 'wild', 'exploit']);
   reveal = null;
   SFX.rollStart(); G.glitch(0.1);
   say('NEW STOCK. SAME PRICES.');
@@ -175,6 +178,7 @@ function packCardX(i) {
 function pickFromPack(i) {
   if (pack.picks <= 0 || pack.picked.includes(i)) return;
   if (slotsFull(pack.items[i])) return askSwap(pack.items[i], () => pickFromPack(i));
+  if (hacksFull(pack.items[i])) return denyHack(-1);
   pack.picked.push(i);
   pack.picks--;
   startReveal(pack.items[i]);

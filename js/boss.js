@@ -709,6 +709,8 @@ function drawCut() {
 return {
   setup, active, intro, skip, resume, beforeRoll, afterLand, onScore, bite, react, defeat, gloat,
   update, drawBack, drawBody, draw, drawActor, drawCage, drawCut,
+  /** An exploit changed a die: drop CIPHER's padlock from it. */
+  clearLock(i) { locks.delete(i); },
   get inCut() { return !!cut; },
   get busy() { return busy || tasks.length > 0; },
   get held() { return held; },
