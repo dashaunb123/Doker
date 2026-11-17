@@ -32,6 +32,12 @@ let dieFor = null;          // { item, done(k) } — a die mod is waiting for yo
 let shakeSlot = -1, shakeT = 0, blinkT = 0, nextBlink = 2;
 
 const money = () => run.money;
+/** What an item costs here (PATCH TUESDAY discounts patches). */
+function cost(it) {
+  let p = itemPrice(it);
+  if (it.kind === 'patch') p -= (run.perks || []).filter(q => q.id === 'patchtuesday').reduce((a, q) => a + q.stats.amt, 0);
+  return Math.max(1, p);
+}
 
 /** snap = a saved shop (from snapshot()) to restore instead of rolling fresh stock. */
 function enter(r, cb, saveCb, snap) {
@@ -85,15 +91,15 @@ function buy(i) {
   if (i < 2) {
     const it = items[i];
     if (!it) return;
-    if (money() < itemPrice(it)) return broke(i);
+    if (money() < cost(it)) return broke(i);
     if (slotsFull(it)) return askSwap(it, () => buy(i));
     if (hacksFull(it)) return denyHack(i);
-    if (it.kind === 'diemod' && it.target == null) {
+    if ((it.kind === 'diemod' || it.kind === 'sticker') && it.target == null) {
       dieFor = { item: it, done: k => { it.target = k; dieFor = null; buy(i); } };
       say('WHICH DIE GETS IT?'); SFX.select();
       return;
     }
-    run.money -= itemPrice(it);
+    run.money -= cost(it);
     items[i] = null;
     SFX.buy();
     startReveal(it);
@@ -163,20 +169,24 @@ const dieCardX = k => Math.round(RX + (RW - (5 * 40 + 4 * 12)) / 2 + k * 52);
 function drawDiePick() {
   const { rect, rrect, text, ctx, T } = G;
   ctx.globalAlpha = 0.95; rect(RX - 3, 20, RW + 6, 181, '#08061a'); ctx.globalAlpha = 1;
-  const it = dieFor.item, def = DIEMOD_DEFS[it.id];
+  const it = dieFor.item, isSt = it.kind === 'sticker';
+  const def = isSt ? STICKER_DEFS[it.id] : DIEMOD_DEFS[it.id];
   text('PICK A DIE', RCX, 24, PAL.white, { align: 'center', scale: 2, outline: PAL.ink });
-  text('IT BECOMES A ' + def.name, RCX, 44, PAL.green, { align: 'center' });
+  text(isSt ? 'SLAP THE ' + def.name + ' ON IT' : 'IT BECOMES A ' + def.name, RCX, 44, PAL.green, { align: 'center' });
   for (let k = 0; k < 5; k++) {
     const x = dieCardX(k), on = hover === k, y = DPY - (on ? 3 : 0);
-    const cur = dieMod(run, k);
+    const cur = isSt ? dieSticker(run, k) : dieMod(run, k);
     rrect(x - 1, y - 1, 42, 50, on ? PAL.green : PAL.ink);
     rrect(x, y, 40, 48, '#241a4a');
     rect(x + 2, y + 2, 36, 44, '#0b0920');
     // show the die as it is now, and (hovered) as it will be
-    const th = on ? it.id : (cur || 'bone');
+    const th = !isSt && on ? it.id : (dieMod(run, k) || 'bone');
     ctx.drawImage(DIE[th][6], x + 4, y + 6, 32, 32);
+    const st = isSt && on ? it.id : dieSticker(run, k);
+    if (st) { rect(x + 27, y + 5, 9, 9, PAL.ink); rect(x + 28, y + 6, 7, 7, STICKER_DEFS[st].col); rect(x + 28, y + 6, 3, 1, '#ffffff'); }
     text('DIE ' + (k + 1), x + 20, y + 40, '#8a7fc0', { align: 'center' });
-    if (cur && cur !== it.id) text(on ? 'REPLACES ' + DIEMOD_DEFS[cur].code : DIEMOD_DEFS[cur].code, x + 20, y + 52, on ? PAL.red : '#a99be0', { align: 'center' });
+    const curDef = cur && (isSt ? STICKER_DEFS[cur] : DIEMOD_DEFS[cur]);
+    if (cur && cur !== it.id) text(on ? 'REPLACES ' + curDef.code : curDef.code, x + 20, y + 52, on ? PAL.red : '#a99be0', { align: 'center' });
     if (on) drawCorner(x, y, T);
   }
 }
@@ -214,7 +224,7 @@ function pickFromPack(i) {
   if (pack.picks <= 0 || pack.picked.includes(i)) return;
   if (slotsFull(pack.items[i])) return askSwap(pack.items[i], () => pickFromPack(i));
   if (hacksFull(pack.items[i])) return denyHack(-1);
-  if (pack.items[i].kind === 'diemod' && pack.items[i].target == null) {
+  if ((pack.items[i].kind === 'diemod' || pack.items[i].kind === 'sticker') && pack.items[i].target == null) {
     const it = pack.items[i];
     dieFor = { item: it, done: k => { it.target = k; dieFor = null; pickFromPack(i); } };
     say('WHICH DIE GETS IT?'); SFX.select();
@@ -350,7 +360,7 @@ function drawShopFloor() {
       const it = items[i];
       if (!it) { soldSlot(x); return; }
       UI.itemCard(it, x + sh, y, CW, CH, { hover: on });
-      UI.priceTag(itemPrice(it), x + CW / 2, CY + CH + 3, money() >= itemPrice(it));
+      UI.priceTag(cost(it), x + CW / 2, CY + CH + 3, money() >= cost(it));
     } else {
       const p = packs[i - 2];
       if (p.sold) { soldSlot(x); return; }
@@ -377,9 +387,10 @@ function drawInfo() {
   const hovered = swap ? (hover >= 0 ? run.wilds[hover] : null)
     : pack ? (hover >= 0 ? pack.items[hover] : null) : (hover >= 0 && hover < 2 ? items[hover] : null);
   if (dieFor) {
-    const it = dieFor.item, k = hover;
-    const body = DIEMOD_DEFS[it.id].desc + (k >= 0 && dieMod(run, k) && dieMod(run, k) !== it.id ? ' REPLACES THE ' + DIEMOD_DEFS[dieMod(run, k)].name + ' ON DIE ' + (k + 1) + '.' : '');
-    UI.infoBox(IX, IY, IW, IH, itemName(it), RARITY.col[it.rarity], '$' + itemPrice(it), PAL.gold, body, PAL.white);
+    const it = dieFor.item, k = hover, isSt = it.kind === 'sticker';
+    const D = isSt ? STICKER_DEFS : DIEMOD_DEFS, cur = k >= 0 ? (isSt ? dieSticker(run, k) : dieMod(run, k)) : null;
+    const body = D[it.id].desc + (cur && cur !== it.id ? ' REPLACES THE ' + D[cur].name + ' ON DIE ' + (k + 1) + '.' : '');
+    UI.infoBox(IX, IY, IW, IH, itemName(it), RARITY.col[it.rarity], '$' + cost(it), PAL.gold, body, PAL.white);
     return;
   }
   if (swap && !hovered) {

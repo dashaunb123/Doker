@@ -41,14 +41,15 @@ function evaluateDice(faces, opts = {}) {
   const all = faces.map(() => true);
   const [a, b] = groups;
   let key, scoring;
-  if (a.c === 5)                                     { key = 'doker';    scoring = all; }
-  else if (a.c === 4)                                { key = 'four';     scoring = mark([a.f]); }
+  // >= so extra dice (TWIN, PHANTOM) can only ever help: six of a kind is still DOKER, 3+3 is a full house
+  if (a.c >= 5)                                      { key = 'doker';    scoring = faces.length > 5 ? mark([a.f]) : all; }
+  else if (a.c >= 4)                                 { key = 'four';     scoring = mark([a.f]); }
   else if (sorted === '12345' || sorted === '23456' || (opts.spoof && faces.length === 5 && a.c === 1))
                                                      { key = 'straight'; scoring = all; }
-  else if (a.c === 3 && b && b.c === 2)              { key = 'full';     scoring = all; }
-  else if (a.c === 3)                                { key = 'three';    scoring = mark([a.f]); }
-  else if (a.c === 2 && b && b.c === 2)              { key = 'twopair';  scoring = mark([a.f, b.f]); }
-  else if (a.c === 2)                                { key = 'pair';     scoring = mark([a.f]); }
+  else if (a.c >= 3 && b && b.c >= 2)                { key = 'full';     scoring = faces.length > 5 ? mark([a.f, b.f]) : all; }
+  else if (a.c >= 3)                                 { key = 'three';    scoring = mark([a.f]); }
+  else if (a.c >= 2 && b && b.c >= 2)                { key = 'twopair';  scoring = mark([a.f, b.f]); }
+  else if (a.c >= 2)                                 { key = 'pair';     scoring = mark([a.f]); }
   else                                               { key = 'bust';     scoring = faces.map(() => false); }
   return { key, scoring, sum };
 }

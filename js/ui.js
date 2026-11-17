@@ -107,7 +107,7 @@ function itemCard(it, x, y, w, h, o = {}) {
   rrect(x, y, w, h, col);
   rect(x + 1, y + 1, w - 2, h - 2, '#15112c');
   rect(x + 1, y + 1, w - 2, 9, col);
-  text({ perk: 'PERK', wild: 'WILD', exploit: 'HACK', patch: 'PATCH', diemod: 'DICE' }[it.kind], x + w / 2, y + 2, PAL.ink, { align: 'center' });
+  text({ perk: 'PERK', wild: 'WILD', exploit: 'HACK', patch: 'PATCH', diemod: 'DICE', sticker: 'DICE' }[it.kind], x + w / 2, y + 2, PAL.ink, { align: 'center' });
 
   const code = itemCode(it);
   const jit = r === 5 && Math.random() < 0.15 ? (Math.random() < 0.5 ? -2 : 2) : 0;

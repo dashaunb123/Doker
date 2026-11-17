@@ -783,7 +783,12 @@ function update(dt) {
     if (params.has('play')) {
       state = 'play'; PLAY.enter();
       // dev-only test hooks: ?play&auto  ?play&perks=6  ?play&shop  ?play&pack=megaperk
-      if (params.has('perks')) rollItems(+params.get('perks') || 5, ['perk'], 3).forEach(it => applyItem(PLAY.run, it));
+      // ?perks=6 (random) or ?perks=backdoor,cronjob (by id)
+      if (params.has('perks')) {
+        const v = params.get('perks') || '5';
+        const list = /^\d+$/.test(v) ? rollItems(+v, ['perk'], 3) : v.split(',').filter(id => PERK_DEFS[id]).map(id => makePerk(id, 2));
+        list.forEach(it => applyItem(PLAY.run, it));
+      }
       // ?wilds=dealer,mirror,botnet  (or ?wilds=3 for random ones); &ed=holo forces an edition
       if (params.has('wilds')) {
         const v = params.get('wilds') || '3';
@@ -792,6 +797,7 @@ function update(dt) {
       }
       // ?mods=gold,glass,neon,weighted  put die mods on dice 1-5 (use - to skip a die)
       if (params.has('mods')) PLAY.debugMods((params.get('mods') || 'gold,glass,neon,weighted').split(','));
+      if (params.has('stickers')) PLAY.debugStickers((params.get('stickers') || 'red,blue,purple').split(','));
       // ?exploits=force,nuke  start holding those exploits
       if (params.has('exploits')) PLAY.debugExploits((params.get('exploits') || 'nudge,force').split(','));
       // ?doker  the first roll is five of a kind (to see the DOKER!! event)

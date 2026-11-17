@@ -73,6 +73,14 @@ const DIE_THEMES = {
   glass:    { body: '#bfeff5', hi: '#ffffff', shade: '#7fc4d6', pip: '#1e6f8a', pipD: '#0f4a5e', out: '#2b5f7a', deco: 'glint' },
   neon:     { body: '#0f1a24', hi: '#1d3340', shade: '#08101a', pip: '#4dff88', pipD: '#b6ffcc', out: '#2ce8f5', deco: 'glow' },
   weighted: { body: '#5a5f6e', hi: '#8a90a0', shade: '#363a46', pip: '#feae34', pipD: '#b87a1a', out: PAL.ink, deco: 'rivets' },
+  chrome:   { body: '#c9d3e0', hi: '#ffffff', shade: '#7d8aa0', pip: '#28324a', pipD: '#11172a', out: PAL.ink, deco: 'mirror' },
+  lucky:    { body: '#2e9e5b', hi: '#6ee89a', shade: '#1a6b3c', pip: '#fee761', pipD: '#b87a1a', out: PAL.ink, deco: 'shine' },
+  stone:    { body: '#8a8478', hi: '#b3ad9f', shade: '#5c574e', pip: '#5c574e', pipD: '#5c574e', out: PAL.ink, deco: 'stone', noPips: true },
+  wild:     { body: '#ff3df2', hi: '#ff9ef8', shade: '#9e2390', pip: '#ffffff', pipD: '#2ce8f5', out: PAL.ink, deco: 'rainbow' },
+  twin:     { body: '#f4f4f4', hi: '#ffffff', shade: '#feae34', pip: '#e43b44', pipD: '#9e2835', out: '#b87a1a', deco: 'twin' },
+  rubber:   { body: '#e8566b', hi: '#ff9aa8', shade: '#a8304a', pip: '#ffffff', pipD: '#ffd6dc', out: PAL.ink },
+  prism:    { body: '#d9f4ff', hi: '#ffffff', shade: '#9fb8ff', pip: '#b46bff', pipD: '#2ce8f5', out: '#5a43a0', deco: 'rainbow' },
+  ember:    { body: '#2a1a1e', hi: '#4a2a2a', shade: '#140a0c', pip: '#f77622', pipD: '#feae34', out: '#e43b44', deco: 'cracks' },
 };
 
 function makeDie(face, th) {
@@ -91,7 +99,7 @@ function makeDie(face, th) {
       else if (x === 1 || y === 1) col = th.hi;
       px(x, y, col);
     }
-  for (const [cx, cy] of FACES[face]) {
+  if (!th.noPips) for (const [cx, cy] of FACES[face]) {
     const x = PIP_POS[cx], y = PIP_POS[cy];
     px(x, y, th.pip); px(x + 1, y, th.pip); px(x, y + 1, th.pip); px(x + 1, y + 1, th.pipD);
   }
@@ -100,6 +108,11 @@ function makeDie(face, th) {
   if (th.deco === 'shine') { px(2, 2, '#fff4c2'); px(3, 2, '#fff4c2'); px(2, 3, '#fff4c2'); px(13, 2, '#fff4c2'); }
   if (th.deco === 'rivets') for (const [x, y] of [[2, 2], [13, 2], [2, 13], [13, 13]]) px(x, y, '#c9cdd8');
   if (th.deco === 'glow') { px(2, 2, '#2ce8f5'); px(13, 13, '#2ce8f5'); }
+  if (th.deco === 'mirror') for (let k = 0; k < 6; k++) px(3 + k, 9 - k, '#ffffff');
+  if (th.deco === 'stone') for (const [x, y, c] of [[4, 4, '#5c574e'], [9, 6, '#b3ad9f'], [6, 10, '#5c574e'], [11, 11, '#6b665c'], [12, 4, '#6b665c'], [3, 8, '#b3ad9f'], [8, 3, '#5c574e']]) px(x, y, c);
+  if (th.deco === 'rainbow') ['#e43b44', '#feae34', '#4dff88', '#2ce8f5', '#b46bff'].forEach((c, k) => px(2 + k * 3, 14, c));
+  if (th.deco === 'twin') { px(2, 2, '#fee761'); px(13, 2, '#fee761'); }
+  if (th.deco === 'cracks') for (const [x, y] of [[3, 5], [4, 6], [5, 6], [12, 9], [11, 10], [6, 12], [7, 13]]) px(x, y, '#f77622');
   return c;
 }
 

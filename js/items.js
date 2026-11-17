@@ -100,6 +100,59 @@ const PERK_DEFS = {
     desc: (s, show) => `${_q(show, s.pct)}% CHANCE THAT A SCORING HAND SCORES TWICE.`,
   },
 };
+// ---- wave 2 perks ----
+Object.assign(PERK_DEFS, {
+  backdoor: {
+    name: 'BACKDOOR', code: 'BKD',
+    roll: r => ({ amt: [1, 1, 1, 2, 2, 3][r] }),
+    desc: (s, show) => (s.amt === 1 ? 'YOUR FIRST BUST EACH FIREWALL DOES NOT USE A ROLL.' : `YOUR FIRST ${_q(show, s.amt)} BUSTS EACH FIREWALL DO NOT USE A ROLL.`),
+  },
+  speedrun: {
+    name: 'SPEEDRUN', code: 'SPD',
+    roll: r => ({ left: 3, amt: [2, 3, 4, 5, 8, 12][r] }),
+    desc: (s, show) => `BREACH A FIREWALL WITH ${s.left}+ ROLLS LEFT: +$${_q(show, s.amt)}.`,
+  },
+  loworbit: {
+    name: 'LOW ORBIT', code: 'LOW',
+    roll: r => ({ amt: [4, 6, 9, 12, 20, 30][r] }),
+    desc: (s, show) => `EVERY DIE SHOWS 3 OR LESS: +${_q(show, s.amt)} MULT.`,
+  },
+  highroller: {
+    name: 'HIGH ROLLER', code: 'HGH',
+    roll: r => ({ amt: [20, 30, 45, 60, 100, 150][r] }),
+    desc: (s, show) => `EVERY DIE SHOWS 4 OR MORE: +${_q(show, s.amt)} CHIPS.`,
+  },
+  cronjob: {
+    name: 'CRON JOB', code: 'CRN',
+    roll: r => ({ x: [2, 2.5, 3, 3.5, 5, 7][r] }),
+    desc: (s, show) => `EVERY 4TH ROLL OF A FIREWALL SCORES X${_q(show, fmtMult(s.x))}.`,
+  },
+  patchtuesday: {
+    name: 'PATCH TUESDAY', code: 'PTU',
+    roll: r => ({ amt: [1, 1, 1, 2, 2, 3][r] }),
+    desc: (s, show) => `PATCHES COST $${_q(show, s.amt)} LESS IN THE BLACK MARKET.`,
+  },
+  cachehit: {
+    name: 'CACHE HIT', code: 'CCH',
+    roll: r => ({ amt: [10, 15, 25, 40, 60, 100][r] }),
+    desc: (s, show) => `YOUR MOST COMMON FACE MATCHES LAST ROLL'S: +${_q(show, s.amt)} CHIPS.`,
+  },
+  sidechannel: {
+    name: 'SIDE CHANNEL', code: 'SDC',
+    roll: r => ({ amt: [2, 3, 4, 6, 9, 14][r] }),
+    desc: (s, show) => `TWO PAIR SCORES +${_q(show, s.amt)} MULT.`,
+  },
+  stackoverflow: {
+    name: 'STACK OVERFLOW', code: 'STO',
+    roll: r => ({ amt: [5, 8, 12, 18, 30, 45][r] }),
+    desc: (s, show) => `DICE ADD UP TO 25 OR MORE: +${_q(show, s.amt)} MULT.`,
+  },
+  pipeline: {
+    name: 'PIPELINE', code: 'PPL',
+    roll: r => ({ amt: [5, 8, 10, 15, 25, 40][r] }),
+    desc: (s, show) => `EVERY STRAIGHT YOU ROLL GIVES STRAIGHTS +${_q(show, s.amt)} CHIPS FOREVER.`,
+  },
+});
 const PERK_IDS = Object.keys(PERK_DEFS);
 
 function makePerk(id, r) {
@@ -146,6 +199,22 @@ const WILD_DEFS = {
   deadman:    { name: "DEAD MAN'S SWITCH", code: 'DMS', rarity: 2, price: 6, desc: () => 'ON YOUR FINAL ROLL, IF THE TARGET ISN\'T HIT YET: X4 MULT.' },
   spoofer:    { name: 'SPOOFER',           code: 'SPF', rarity: 2, price: 7, desc: () => 'STRAIGHTS CAN SKIP ONE NUMBER (1-2-3-5-6 COUNTS).' },
 };
+// ---- wave 2 wildcards ----
+Object.assign(WILD_DEFS, {
+  hotpotato:   { name: 'HOT POTATO',     code: 'HOT', rarity: 2, price: 6, desc: () => 'X4 MULT. SLIDES ONE SLOT RIGHT EVERY ROLL AND BURNS UP OFF THE END.' },
+  doubleagent: { name: 'DOUBLE AGENT',   code: 'DBL', rarity: 1, price: 5, desc: () => 'EVERY ROLL: COIN FLIP FOR X2 OR X0.5 MULT.' },
+  captcha:     { name: 'CAPTCHA',        code: 'CAP', rarity: 2, price: 6, desc: () => 'DICE LAND IN ORDER, LOW TO HIGH, LEFT TO RIGHT: X3 MULT.' },
+  sandcastle:  { name: 'SANDCASTLE',     code: 'SND', rarity: 0, price: 4, desc: s => `GAINS +10 CHIPS EVERY ROLL, CRUMBLES EACH FIREWALL. NOW +${(s.chips || 0) + 10}.` },
+  snakeoil:    { name: 'SNAKE OIL',      code: 'OIL', rarity: 0, price: 4, desc: s => `DOES NOTHING. ITS SELL VALUE GOES UP $1 EVERY FIREWALL (+$${s.bonus || 0} SO FAR).` },
+  deaddrop:    { name: 'DEAD DROP',      code: 'DRP', rarity: 1, price: 5, desc: () => 'AFTER EACH FIREWALL YOU BREACH, GET A RANDOM EXPLOIT (IF YOU HAVE ROOM).' },
+  auditor:     { name: 'THE AUDITOR',    code: 'AUD', rarity: 2, price: 7, desc: () => '+X0.25 MULT FOR EACH DIFFERENT HAND YOU HAVE SCORED THIS FIREWALL.' },
+  antivirus:   { name: 'ANTIVIRUS',      code: 'AV',  rarity: 2, price: 6, desc: () => 'QUARANTINES THE NEXT BOSS: ITS RULE IS CANCELLED. THEN IT DELETES ITSELF.' },
+  ghost:       { name: 'GHOST PROTOCOL', code: 'GST', rarity: 1, price: 5, desc: () => 'A BUST SCORES HALF OF YOUR LAST SCORING HAND.' },
+  hexeditor:   { name: 'HEX EDITOR',     code: 'HEX', rarity: 0, price: 4, desc: () => '1S ARE WORTH 6 CHIPS AND 6S ARE WORTH 1.' },
+  latency:     { name: 'LATENCY',        code: 'LAT', rarity: 2, price: 6, desc: () => "YOUR PREVIOUS ROLL'S HAND SCORES ITS CHIPS AND MULT AGAIN." },
+  quantum:     { name: 'QUANTUM',        code: 'QNT', rarity: 3, price: 8, desc: () => 'EVERY ROLL ONE RANDOM DIE BECOMES WHATEVER MAKES THE BEST HAND.' },
+  sudo:        { name: 'SUDO',           code: 'SUD', rarity: 1, price: 5, desc: () => "THE LEFTMOST DIE'S CHIPS TRIGGER AGAIN." },
+});
 const WILD_IDS = Object.keys(WILD_DEFS);
 const WILD_SLOTS = 5;
 
@@ -166,10 +235,12 @@ function makeWild(id, edition = rollEdition()) {
   if (id === 'keylogger') state.x = 1;
   if (id === 'cookiejar') state.chips = 0;
   if (id === 'glitch') state.face = _ri(1, 6);
+  if (id === 'sandcastle') state.chips = 0;
+  if (id === 'snakeoil') state.bonus = 0;
   return { kind: 'wild', id, uid: ++_uid, rarity: WILD_DEFS[id].rarity, edition, state, revealed: false };
 }
 const wildsOf = (run, id) => (run.wilds || []).filter(w => w.id === id);
-const wildSell = w => Math.max(1, Math.floor(itemPrice(w) / 2));
+const wildSell = w => Math.max(1, Math.floor(itemPrice(w) / 2)) + ((w.state && w.state.bonus) || 0);
 
 // ---------- exploits (single-use hacks, fired in the HACK WINDOW after the dice land) ----------
 const EXPLOIT_DEFS = {
@@ -177,6 +248,14 @@ const EXPLOIT_DEFS = {
   clone: { name: 'CLONE', code: 'CLN', rarity: 1, price: 4, desc: 'COPY ONE DIE ONTO ANOTHER.' },
   nuke:  { name: 'NUKE',  code: 'NUK', rarity: 2, price: 5, desc: "REROLL ALL FIVE DICE. DOESN'T COST A ROLL." },
   force: { name: 'FORCE', code: 'FRC', rarity: 3, price: 7, desc: 'SET ONE DIE TO ANY FACE YOU WANT.' },
+  flip:      { name: 'FLIP',       code: 'FLP', rarity: 0, price: 3, desc: 'TURN ONE DIE TO ITS OPPOSITE FACE (1<>6, 2<>5, 3<>4).' },
+  swap:      { name: 'SWAP',       code: 'SWP', rarity: 0, price: 3, desc: 'TWO DICE TRADE FACES.' },
+  reroll1:   { name: 'REROLL ONE', code: 'RR1', rarity: 0, price: 2, desc: 'REROLL A SINGLE DIE.' },
+  overwrite: { name: 'OVERWRITE',  code: 'OVW', rarity: 3, price: 8, desc: 'EVERY DIE SHOWING ONE FACE BECOMES ANOTHER FACE.' },
+  inject:    { name: 'INJECT',     code: 'INJ', rarity: 0, price: 3, desc: '+50 CHIPS ON THIS ROLL.' },
+  rollback:  { name: 'ROLLBACK',   code: 'RBK', rarity: 1, price: 4, desc: 'ON A BUST: CANCEL THE ROLL AND GET IT BACK.' },
+  siphon:    { name: 'SIPHON',     code: 'SPH', rarity: 0, price: 3, desc: 'GAIN $ EQUAL TO YOUR DICE TOTAL / 5.' },
+  ping:      { name: 'PING',       code: 'PNG', rarity: 1, price: 4, desc: '+1 LEVEL TO THE HAND YOU JUST ROLLED.' },
 };
 const EXPLOIT_IDS = Object.keys(EXPLOIT_DEFS);
 const EXPLOIT_SLOTS = 2;
@@ -189,7 +268,24 @@ const DIEMOD_DEFS = {
   gold:     { name: 'GOLD DIE',     code: 'GLD', rarity: 1, price: 5, desc: '+$1 EVERY TIME THIS DIE SCORES.' },
   weighted: { name: 'WEIGHTED DIE', code: 'WGT', rarity: 1, price: 5, desc: 'THIS DIE ROLLS 4, 5 AND 6 MORE OFTEN.' },
   glass:    { name: 'GLASS DIE',    code: 'GLS', rarity: 2, price: 6, desc: 'X2 MULT WHEN THIS DIE SCORES. 1 IN 6 CHANCE TO SHATTER AFTER.' },
+  chrome:   { name: 'CHROME DIE',   code: 'CHR', rarity: 1, price: 5, desc: "+3 MULT WHEN THIS DIE ISN'T PART OF THE HAND." },
+  lucky:    { name: 'LUCKY DIE',    code: 'LKY', rarity: 1, price: 5, desc: 'WHEN IT SCORES: 1 IN 5 FOR +20 MULT, 1 IN 15 FOR +$10.' },
+  stone:    { name: 'STONE DIE',    code: 'STN', rarity: 0, price: 4, desc: 'NO FACE. ALWAYS +50 CHIPS, BUT NEVER PART OF A HAND.' },
+  wild:     { name: 'WILD DIE',     code: 'WLD', rarity: 3, price: 8, desc: 'COUNTS AS WHATEVER FACE MAKES THE BEST HAND.' },
+  twin:     { name: 'TWIN DIE',     code: 'TWN', rarity: 4, price: 10, desc: 'COUNTS TWICE FOR PAIRS AND KINDS (NOT STRAIGHTS).' },
+  rubber:   { name: 'RUBBER DIE',   code: 'RBR', rarity: 0, price: 3, desc: 'IF IT ROLLS A 1, IT BOUNCES AND REROLLS ONCE.' },
+  prism:    { name: 'PRISM DIE',    code: 'PRS', rarity: 2, price: 6, desc: 'X1.5 MULT WHEN THIS DIE SCORES.' },
+  ember:    { name: 'EMBER DIE',    code: 'EMB', rarity: 1, price: 5, desc: '+1 MULT FOR EACH SCORING HAND IN A ROW IT IS PART OF.' },
 };
+// stickers: a decal slapped onto a die; stacks with its mod (one sticker per die)
+const STICKER_DEFS = {
+  red:    { name: 'RED STICKER',    code: 'RED', rarity: 2, price: 6, col: '#e43b44', desc: "THIS DIE'S CHIPS TRIGGER TWICE." },
+  blue:   { name: 'BLUE STICKER',   code: 'BLU', rarity: 1, price: 5, col: '#4f9bff', desc: '+1 ROLL WHEN THIS DIE IS PART OF A DOKER.' },
+  purple: { name: 'PURPLE STICKER', code: 'PRP', rarity: 2, price: 6, col: '#b46bff', desc: 'SPAWNS AN EXPLOIT WHEN IT SCORES IN A FOUR OF A KIND OR BETTER.' },
+};
+const STICKER_IDS = Object.keys(STICKER_DEFS);
+function makeSticker(id) { return { kind: 'sticker', id, uid: ++_uid, rarity: STICKER_DEFS[id].rarity, revealed: false }; }
+const dieSticker = (run, i) => (run.dieStickers || [])[i] || null;
 const DIEMOD_IDS = Object.keys(DIEMOD_DEFS);
 const GLASS_BREAK = 1 / 6;
 function makeDieMod(id) { return { kind: 'diemod', id, uid: ++_uid, rarity: DIEMOD_DEFS[id].rarity, revealed: false }; }
@@ -197,27 +293,31 @@ const dieMod = (run, i) => (run.dieMods || [])[i] || null;
 
 // ---------- item helpers ----------
 function itemName(it) {
+  if (it.kind === 'sticker') return STICKER_DEFS[it.id].name;
   if (it.kind === 'diemod') return DIEMOD_DEFS[it.id].name;
   if (it.kind === 'wild') return WILD_DEFS[it.id].name;
   if (it.kind === 'exploit') return EXPLOIT_DEFS[it.id].name;
   return it.kind === 'perk' ? PERK_DEFS[it.id].name : HANDS[it.key].proto + ' PATCH';
 }
 function itemCode(it) {
+  if (it.kind === 'sticker') return STICKER_DEFS[it.id].code;
   if (it.kind === 'diemod') return DIEMOD_DEFS[it.id].code;
   if (it.kind === 'wild') return WILD_DEFS[it.id].code;
   if (it.kind === 'exploit') return EXPLOIT_DEFS[it.id].code;
   return it.kind === 'perk' ? PERK_DEFS[it.id].code : PATCH_CODE[it.key];
 }
 function itemPrice(it) {
+  if (it.kind === 'sticker') return STICKER_DEFS[it.id].price;
   if (it.kind === 'diemod') return DIEMOD_DEFS[it.id].price;
   if (it.kind === 'wild') return WILD_DEFS[it.id].price + (it.edition ? EDITIONS[it.edition].price : 0);
   if (it.kind === 'exploit') return EXPLOIT_DEFS[it.id].price;
   return RARITY.price[it.rarity];
 }
 /** Which CARD_ART icon an item uses. */
-function artKey(it) { return it.kind === 'patch' ? it.key : it.kind === 'diemod' ? 'mod_' + it.id : it.id; }
+function artKey(it) { return it.kind === 'patch' ? it.key : it.kind === 'diemod' ? 'mod_' + it.id : it.kind === 'sticker' ? 'sticker_' + it.id : it.id; }
 /** Short line under the art on a card. */
 function itemShort(it) {
+  if (it.kind === 'sticker') return it.target != null ? 'DIE ' + (it.target + 1) : 'STICKER';
   if (it.kind === 'diemod') return it.target != null ? 'DIE ' + (it.target + 1) : 'DIE MOD';
   if (it.kind === 'wild') return it.edition ? EDITIONS[it.edition].name : '';
   if (it.kind === 'exploit') return '1 USE';
@@ -239,6 +339,7 @@ function perkShort(it) {
 }
 
 function itemDesc(it, show, run) {
+  if (it.kind === 'sticker') return STICKER_DEFS[it.id].desc + ' STACKS WITH A DIE MOD.' + (it.target != null ? ' ON DIE ' + (it.target + 1) + '.' : ' YOU PICK WHICH DIE.');
   if (it.kind === 'diemod') return DIEMOD_DEFS[it.id].desc + (it.target != null ? ' ON DIE ' + (it.target + 1) + '.' : ' YOU PICK WHICH DIE.');
   if (it.kind === 'exploit') return EXPLOIT_DEFS[it.id].desc + ' USE IT AFTER THE DICE LAND, BEFORE THEY SCORE.';
   if (it.kind === 'wild') {
@@ -271,6 +372,7 @@ function applyItem(run, it) {
   if (it.kind === 'wild') { (run.wilds = run.wilds || []).push(it); return; }
   if (it.kind === 'exploit') { (run.exploits = run.exploits || []).push(it); return; }
   if (it.kind === 'diemod') { (run.dieMods = run.dieMods || [null, null, null, null, null])[it.target ?? 0] = it.id; return; }
+  if (it.kind === 'sticker') { (run.dieStickers = run.dieStickers || [null, null, null, null, null])[it.target ?? 0] = it.id; return; }
   const b = PATCH_BOOST[it.rarity];
   run.levels[it.key] = (run.levels[it.key] ?? 1) + b.lv;
   const bonus = (run.bonus[it.key] = run.bonus[it.key] || { chips: 0, mult: 0 });
@@ -286,8 +388,8 @@ function applyItem(run, it) {
 const PACKS = {
   perk:      { name: 'PERK CACHE',        lines: ['PERK', 'CACHE'],     price: 4, show: 3, pick: 1, pool: ['perk'],          col: '#7a3bd4', boost: 1 },
   patch:     { name: 'PATCH BUNDLE',      lines: ['PATCH', 'BUNDLE'],   price: 4, show: 4, pick: 1, pool: ['patch'],         col: '#2f5fd0', boost: 1 },
-  mystery:   { name: 'MYSTERY PAYLOAD',   lines: ['MYSTERY', 'PAYLOAD'],price: 6, show: 5, pick: 1, pool: ['perk', 'patch', 'wild', 'exploit', 'diemod'], col: '#c42fa8', boost: 1 },
-  dicelab:   { name: 'DICE LAB',          lines: ['DICE', 'LAB'],       price: 5, show: 3, pick: 1, pool: ['diemod'],        col: '#b87a1a', boost: 1 },
+  mystery:   { name: 'MYSTERY PAYLOAD',   lines: ['MYSTERY', 'PAYLOAD'],price: 6, show: 5, pick: 1, pool: ['perk', 'patch', 'wild', 'exploit', 'diemod', 'sticker'], col: '#c42fa8', boost: 1 },
+  dicelab:   { name: 'DICE LAB',          lines: ['DICE', 'LAB'],       price: 5, show: 3, pick: 1, pool: ['diemod', 'diemod', 'sticker'], col: '#b87a1a', boost: 1 },
   exploit:   { name: 'EXPLOIT KIT',       lines: ['EXPLOIT', 'KIT'],    price: 4, show: 3, pick: 1, pool: ['exploit'],       col: '#c43f1e', boost: 1 },
   wild:      { name: 'WILDCARD DROP',     lines: ['WILD', 'DROP'],      price: 6, show: 3, pick: 1, pool: ['wild'],          col: '#1e8c4f', boost: 1 },
   megaperk:  { name: 'MEGA PERK CACHE',   lines: ['MEGA', 'PERKS'],     price: 8, show: 6, pick: 2, pool: ['perk'],          col: '#7a3bd4', boost: 2, mega: true },
@@ -304,11 +406,16 @@ function rollPackType() {
 
 /** n random items from the given pools, no repeats of the same perk or hand. */
 function rollItems(n, pool, boost = 1) {
-  const out = [], usedPerks = [], usedHands = [], usedWilds = [], usedMods = [], usedHacks = [];
+  const out = [], usedPerks = [], usedHands = [], usedWilds = [], usedMods = [], usedHacks = [], usedStickers = [];
   for (let i = 0; i < n; i++) {
     const kind = _pick(pool);
     const r = RARITY.roll(boost);
-    if (kind === 'diemod') {
+    if (kind === 'sticker') {
+      const opts = STICKER_IDS.filter(e => !usedStickers.includes(e)).length ? STICKER_IDS.filter(e => !usedStickers.includes(e)) : STICKER_IDS;
+      const id = _pick(opts);
+      usedStickers.push(id);
+      out.push(makeSticker(id));
+    } else if (kind === 'diemod') {
       const opts = DIEMOD_IDS.filter(e => !usedMods.includes(e)).length ? DIEMOD_IDS.filter(e => !usedMods.includes(e)) : DIEMOD_IDS;
       let t = Math.random() * opts.reduce((a, e) => a + RARITY.weights[DIEMOD_DEFS[e].rarity] ** 0.5, 0), id = opts[0];
       for (const e of opts) if ((t -= RARITY.weights[DIEMOD_DEFS[e].rarity] ** 0.5) < 0) { id = e; break; }
@@ -441,12 +548,16 @@ function evalHand(run, faces, phantom = 0) {
   // ENCRYPTION boss: 6s are scrambled and count for nothing
   const enc = faces.map((_, i) => run.boss === 'encryption' && vals[i] === 6);
   enc.forEach((e, i) => { if (e) notes.push({ i, txt: 'ENCRYPTED' }); });
+  // STONE dice have no face: never part of a hand (they pay +50 chips in the dice phase instead)
+  const stone = faces.map((_, i) => dieMod(run, i) === 'stone');
   let dropped = -1;
   if (has('packetloss')) {
-    faces.forEach((_, i) => { if (!enc[i] && (dropped < 0 || vals[i] < vals[dropped])) dropped = i; });
+    faces.forEach((_, i) => { if (!enc[i] && !stone[i] && (dropped < 0 || vals[i] < vals[dropped])) dropped = i; });
   }
-  const live = faces.map((_, i) => i).filter(i => i !== dropped && !enc[i]);
-  const wildIdx = glitch ? live.filter(i => faces[i] === glitch.state.face) : [];
+  const live = faces.map((_, i) => i).filter(i => i !== dropped && !enc[i] && !stone[i]);
+  // GLITCH's wild face and WILD dice become whatever makes the best hand
+  const wildIdx = live.filter(i => (glitch && faces[i] === glitch.state.face) || dieMod(run, i) === 'wild' || (has('quantum') && run.quantumDie === i));
+  const twinIdx = live.filter(i => dieMod(run, i) === 'twin');   // TWIN dice count twice for pairs/kinds
 
   let best = null;
   const consider = vv => {
@@ -457,11 +568,12 @@ function evalHand(run, faces, phantom = 0) {
       if (base.length < 5) options.push({ dice: [...base, phantom], slot: 'extra' });
       else for (let j = 0; j < base.length; j++) { const d = base.slice(); d[j] = phantom; options.push({ dice: d, slot: j }); }
     }
+    if (twinIdx.length) options.slice().forEach(o => options.push({ dice: [...o.dice, ...twinIdx.map(i => vv[i])], slot: o.slot, twin: true }));
     for (const o of options) {
       const ev = evaluateDice(o.dice, { spoof });
-      if (o.slot !== -1 && ev.key === 'straight') continue;   // the phantom never makes straights
+      if ((o.slot !== -1 || o.twin) && ev.key === 'straight') continue;   // phantom/twin copies never make straights
       const r = HANDS[ev.key].tier * 1000 + sumReal - (o.slot !== -1 ? 0.5 : 0);
-      if (!best || r > best.r) best = { r, ev, vv: vv.slice(), slot: o.slot };
+      if (!best || r > best.r) best = { r, ev, vv: vv.slice(), slot: o.slot, twin: !!o.twin };
     }
   };
   if (wildIdx.length) {
@@ -476,12 +588,20 @@ function evalHand(run, faces, phantom = 0) {
   const { ev, vv, slot } = best;
   const scoring = faces.map(() => false);
   live.forEach((i, j) => { if (slot !== j) scoring[i] = ev.scoring[j]; });
-  const chipVals = faces.map((_, i) => (i === dropped || enc[i] ? null : vv[i]));
+  const chipVals = faces.map((_, i) => (i === dropped || enc[i] || stone[i] ? null : vv[i]));
   for (const i of wildIdx) notes.push({ i, txt: 'WILD=' + vv[i] });
+  if (best.twin) for (const i of twinIdx) if (scoring[i]) notes.push({ i, txt: 'TWIN' });
   return {
     key: ev.key, scoring, sum: chipVals.reduce((a, v) => a + (v || 0), 0), vals: chipVals,
     dropped, phantomUsed: slot !== -1, notes,
   };
+}
+
+/** The face showing most (ties: the higher face). */
+function mostCommonFace(faces) {
+  const c = {};
+  faces.forEach(f => (c[f] = (c[f] || 0) + 1));
+  return +Object.entries(c).sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];
 }
 
 /** One wildcard's scoring step(s). w = the card whose effect applies, src = the slot it sits in (differs for MIRROR). */
@@ -514,6 +634,19 @@ function wildSteps(run, w, src, ev, faces, ctx, steps) {
     }
     case 'bruteforce': if ((ctx.rollsRound || 1) > 1) add('mult', ctx.rollsRound - 1); break;
     case 'deadman': if (ctx.last && (ctx.scoreBefore ?? 0) < run.target) add('xmult', 4); break;
+    case 'hotpotato': add('xmult', 4); break;
+    case 'doubleagent': add('xmult', Math.random() < 0.5 ? 2 : 0.5); break;
+    case 'captcha': if (faces.every((f, k) => k === 0 || f >= faces[k - 1])) add('xmult', 3); break;
+    case 'sandcastle': add('chips', (w.state.chips || 0) + 10); break;
+    case 'auditor': {
+      const n = new Set([...(run.seenKeys || []), ...(scoring ? [ev.key] : [])]).size;
+      if (n) add('xmult', +(1 + 0.25 * n).toFixed(2));
+      break;
+    }
+    case 'latency':
+      if (run.prevKey && run.prevKey !== 'bust') { const hs = handStats(run, run.prevKey); add('chips', hs.chips); add('mult', hs.mult); }
+      break;
+    case 'sudo': if (ev.vals[0] != null) add('chips', ev.vals[0]); break;
   }
 }
 
@@ -542,6 +675,14 @@ function scoreRoll(run, faces, ctx) {
   each('overclock', p => { if (ctx.first) steps.push({ p, kind: 'xmult', amt: p.stats.x }); });
   each('lastcall', p => { if (ctx.last) steps.push({ p, kind: 'xmult', amt: p.stats.x }); });
   each('recursion', p => { if (scoring && Math.random() * 100 < p.stats.pct) steps.push({ p, kind: 'xmult', amt: 2 }); });
+  const shown = ev.vals.filter(v => v != null);
+  each('loworbit', p => { if (shown.length && shown.every(v => v <= 3)) steps.push({ p, kind: 'mult', amt: p.stats.amt }); });
+  each('highroller', p => { if (shown.length && shown.every(v => v >= 4)) steps.push({ p, kind: 'chips', amt: p.stats.amt }); });
+  each('cronjob', p => { if ((ctx.rollsRound || 0) % 4 === 0) steps.push({ p, kind: 'xmult', amt: p.stats.x }); });
+  const common = mostCommonFace(faces);
+  each('cachehit', p => { if (run.lastCommon && common === run.lastCommon) steps.push({ p, kind: 'chips', amt: p.stats.amt }); });
+  each('sidechannel', p => { if (ev.key === 'twopair') steps.push({ p, kind: 'mult', amt: p.stats.amt }); });
+  each('stackoverflow', p => { if (ev.sum >= 25) steps.push({ p, kind: 'mult', amt: p.stats.amt }); });
 
   // wildcards, left to right (order matters for MIRROR)
   const wilds = run.wilds || [];
@@ -575,13 +716,21 @@ function afterRoll(run, key, faces) {
   const ones = faces.filter(f => f === 1).length;
   for (const w of wildsOf(run, 'cookiejar')) w.state.chips += 3 * ones;
   if (key !== 'bust') (run.seenKeys = run.seenKeys || []).push(key);
+  for (const w of wildsOf(run, 'sandcastle')) w.state.chips = (w.state.chips || 0) + 10;
+  if (key === 'straight') for (const p of perksOf(run, 'pipeline')) {
+    const b = (run.bonus.straight = run.bonus.straight || { chips: 0, mult: 0 });
+    b.chips += p.stats.amt;
+  }
+  run.lastCommon = mostCommonFace(faces);
   run.prevKey = key;
 }
 
 function onRoundStart(run) {
   run.hotShieldUsed = false;
   run.seenKeys = [];
+  run.backdoorUsed = 0;
   for (const w of wildsOf(run, 'glitch')) w.state.face = _ri(1, 6);
+  for (const w of wildsOf(run, 'sandcastle')) w.state.chips = 0;
   for (const p of perksOf(run, 'streak')) if (p.stats.shifty) { p.stats.face = _ri(1, 6); p.stats.stacks = 0; }
 }
 

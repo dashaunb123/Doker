@@ -36,7 +36,7 @@
 <div class="grid" id="patches"></div>
 <h2>PERKS</h2>
 <div class="grid" id="perks"></div>
-<h2>DIE MODS</h2>
+<h2>DIE MODS + STICKERS</h2>
 <div class="grid" id="diemods"></div>
 <h2>EXPLOITS</h2>
 <div class="grid" id="exploits"></div>
@@ -70,7 +70,7 @@ function cardCanvas(it) {
   t.fillStyle = col; t.fillRect(1, 0, W - 2, H); t.fillRect(0, 1, W, H - 2);
   t.fillStyle = '#15112c'; t.fillRect(1, 1, W - 2, H - 2);
   t.fillStyle = col; t.fillRect(1, 1, W - 2, 9);
-  drawText(t, { perk: 'PERK', wild: 'WILD', exploit: 'HACK', patch: 'PATCH', diemod: 'DICE' }[it.kind], W / 2, 2, PAL.ink, { align: 'center' });
+  drawText(t, { perk: 'PERK', wild: 'WILD', exploit: 'HACK', patch: 'PATCH', diemod: 'DICE', sticker: 'DICE' }[it.kind], W / 2, 2, PAL.ink, { align: 'center' });
   const art = CARD_ART[artKey(it)];
   if (art) t.drawImage(art, Math.round((W - art.width) / 2), 11 + Math.max(0, Math.floor((H - 27 - art.height) / 2)));
   else drawText(t, itemCode(it), W / 2, H / 2 - 8, col, { align: 'center', scale: 2 });
@@ -109,6 +109,10 @@ function render() {
   for (const id of DIEMOD_IDS) {
     const it = makeDieMod(id);
     DM.appendChild(tile(it, DIEMOD_DEFS[id].name, RARITY.name[it.rarity] + ' // $' + itemPrice(it) + ' // ' + DIEMOD_DEFS[id].code, itemDesc(it, true)));
+  }
+  for (const id of STICKER_IDS) {
+    const it = makeSticker(id);
+    DM.appendChild(tile(it, STICKER_DEFS[id].name, RARITY.name[it.rarity] + ' // $' + itemPrice(it) + ' // ' + STICKER_DEFS[id].code, itemDesc(it, true)));
   }
   const X = document.getElementById('exploits'); X.innerHTML = '';
   for (const id of EXPLOIT_IDS) {
