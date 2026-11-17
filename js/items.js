@@ -536,6 +536,7 @@ function swapWilds(run, k, j) {
 }
 const exploitSlots = run => (run.rig === 'root' ? 3 : EXPLOIT_SLOTS);
 function targetFor(run, r) {
+  if (run.tutorial) return TUT.target(r);
   const t = RULES.target(r) * (stakeOf(run) >= 3 ? 1.25 : 1) * (stakeOf(run) >= 2 && KNOBS.greyHat === 'boss6x' && (run.bosses || {})[r] ? 1.25 : 1);
   return Math.round(t / 10) * 10;
 }

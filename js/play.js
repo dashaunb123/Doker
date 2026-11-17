@@ -25,7 +25,6 @@ const wildX0 = () => { const n = run ? wildSlots(run) : WILD_SLOTS; return TX + 
 const AIR = 0.62, SETTLE = 0.42, STAGGER = 0.2, FLIPS = 5, INTRO = 1.5;
 
 const TABLE_RAMP = [[4,10,12],[8,16,22],[12,24,32],[18,30,46],[26,36,60],[34,44,74],[44,54,90]];
-const TICK = '*** BREACH ALL 8 FIREWALLS *** SCORE = (HAND CHIPS + DICE) X MULT *** PERKS TRIGGER AFTER THE DICE, THEN WILDCARDS LEFT TO RIGHT *** CLICK A WILDCARD TO SELL OR MOVE IT *** SPACE = ROLL   ESC = MENU   M = MUTE   N = MUSIC *** ';
 const HEX = '0123456789ABCDEF';
 
 // ---------- state ----------
@@ -44,7 +43,7 @@ const badgePop = new Map();
 let felt = null;
 let auto = false;
 
-let pendingContinue = false;
+let pendingContinue = false, pendingTutorial = false;
 let dokerEv = null, forceFaces = null;
 // HACK WINDOW: after the dice land (and the boss has had its turn) you may fire exploits before the roll scores
 let hack = null;             // { sel: exploit index | -1, step: null|'die'|'face'|'nudge'|'target', die, src }
@@ -57,12 +56,13 @@ const DOKER_LEN = 3.6;
 // ---------- autosave (so a crash or a trip to the menu never wipes a run) ----------
 const SAVE_KEY = 'doker.save.v1';
 function saveRun(phase, extra) {
+  if (run && run.tutorial) return;   // the tutorial never touches your saved run
   try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, phase, run, ...extra })); } catch (e) { /* storage blocked */ }
 }
 function loadSave() {
   try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); return d && d.v === 1 && d.run ? d : null; } catch (e) { return null; }
 }
-function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } }
+function clearSave() { if (run && run.tutorial) return; try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } }
 
 const slotX = i => SX0 + i * (SLOT + GAP);
 const wslotX = s => wildX0() + s * (WW + WG);
@@ -156,6 +156,7 @@ function enter() {
   }));
   if (pendingContinue && continueRun()) { pendingContinue = false; return; }
   pendingContinue = false;
+  if (pendingTutorial) { pendingTutorial = false; newRun('stock', 1, true); TUT.start(); return; }
   if (devQuick) { devQuick = false; newRun(devRig.rig, devRig.stake); return; }
   openSetup();
 }
@@ -190,7 +191,7 @@ function continueRun() {
   return true;
 }
 
-function newRun(rig = 'stock', stake = 1) {
+function newRun(rig = 'stock', stake = 1, tutorial = false) {
   run = {
     rig, stake,
     round: 0, target: 0, score: 0, rollsLeft: 0, rollsRound: 0, money: rig === 'whale' ? 20 : RULES.START_MONEY, rollsUsed: 0,
@@ -198,6 +199,7 @@ function newRun(rig = 'stock', stake = 1) {
     bosses: rollBosses(stake), boss: null, ddosDie: -1,
   };
   run.houseRules = rollHouseRules(run.bosses, stake >= 2 && KNOBS.greyHat === 'house3' ? 3 : 2);
+  if (tutorial) { run.tutorial = true; run.bosses = { 3: 'ddos' }; run.houseRules = []; }   // scripted: see js/tutorial.js
   // rig loadouts
   if (rig === 'goldbug') run.dieMods = ['gold', 'gold', 'gold', 'gold', 'gold'];
   if (rig === 'glasscannon') run.dieMods = ['glass', 'glass', 'glass', 'glass', 'glass'];
@@ -227,13 +229,20 @@ function startRound(r) {
     run.boss = null;
   }
   run.ddosDie = ruleOn(run, 'ddos') ? G.randi(0, N - 1) : -1;
+  if (run.tutorial) { run.target = TUT.target(r); if (run.ddosDie >= 0) run.ddosDie = 4; }
   onRoundStart(run);
   run.rollsLeft = rollsPerRound(run);
   run.rollsRound = 0;
   result = null; cur = null; reward = null; seq = []; seqT = 0;
   dice.forEach((d, i) => { d.scoring = false; d.theme = dieTheme(i); });
   BOSS.setup(run, bossHooks);
-  if (run.boss) { setMode('bossintro'); BOSS.intro(() => setMode('ready')); }
+  if (run.boss) {
+    // OPTIONS > BOSS INTROS 'FIRST TIME': skip the cutscene for bosses you've met before
+    const seen = SET.seenBosses.includes(run.boss);
+    if (!seen) { SET.seenBosses.push(run.boss); saveSettings(); }
+    setMode('bossintro'); BOSS.intro(() => setMode('ready'));
+    if (seen && SET.bossIntro === 'first') BOSS.skip();
+  }
   else { setMode('intro'); if (r > 1) SFX.whoosh(); }
   MUSIC.play(track());   // after setMode: coming from the shop, mode must no longer be 'shop'
   saveRun('round');
@@ -267,6 +276,7 @@ function launchDice() {
   run.phishDie = ruleOn(run, 'phisher') && Math.random() < KNOBS.phishChance ? G.randi(0, N - 1) : -1;
   run.blackoutHidden = ruleOn(run, 'blackout');
   dice.forEach(d => (d.dropped = false));
+  if (run.tutorial && !forceFaces) forceFaces = TUT.faces();
   const finals = forceFaces ? forceFaces.slice() : dice.map((_, i) => rollFace(dieWeightsFor(run, i, w)));
   forceFaces = null;
   // RUBBER dice that land on a 1 bounce once and reroll
@@ -705,6 +715,7 @@ function fail() {
 }
 
 function nextFirewall() {
+  if (run.tutorial && run.round >= TUT.ROUNDS) return;   // the tutorial wraps up on its own
   SFX.select();
   if (run.round >= RULES.ROUNDS) {
     clearSave(); run.unlocked = recordWin(run.rig || 'stock', stakeOf(run));
@@ -793,7 +804,11 @@ function drawSetupSidebar() {
   text('ENTER STARTS', x, 170, '#5a4c99');
 }
 
+/** Bottom strip (the old how-to-play ticker lives in the tutorial now). */
+function drawFooter() { G.rect(0, 205, G.W, 11, PAL.ink); G.rect(0, 205, G.W, 1, PAL.purple); }
+
 function openShop(snap) {
+  if (run.tutorial && !snap) snap = TUT.shop(run);
   setMode('shop');
   MUSIC.play(track());
   SHOP.enter(run, () => { G.glitch(0.3); startRound(run.round + 1); }, snapShop => saveRun('shop', { shop: snapShop }), snap);
@@ -1484,7 +1499,7 @@ function render() {
     rect(0, 0, W, 15, PAL.ink); rect(0, 15, W, 1, PAL.purple);
     rrect(3, 2, 46, 11, menuHover ? PAL.green : '#2e2260');
     G.text('< MENU', 6, 4, menuHover ? PAL.ink : PAL.white);
-    G.drawTicker(TICK);
+    drawFooter();
     return;
   }
 
@@ -1522,7 +1537,7 @@ function render() {
     text(run.rollsLeft === 1 ? 'LAST ROLL!' : run.rollsRound === 0 ? 'CLICK ANY DIE TO ROLL' : 'ROLL AGAIN',
       CX, 153, run.rollsLeft === 1 ? PAL.red : PAL.gold, { align: 'center', shadow: PAL.ink });
 
-  G.drawTicker(TICK);
+  drawFooter();
   drawDokerEvent();
   BOSS.drawCut();
 }
@@ -1592,5 +1607,22 @@ return {
   debugRound(r, boss) { if (boss) run.bosses[r] = boss; startRound(r); },
   hasSave: () => !!loadSave(),
   queueContinue() { pendingContinue = true; },
+  /** Next enter() starts the scripted tutorial run. */
+  startTutorial() { pendingTutorial = true; pendingContinue = false; devQuick = false; },
+  newGame() { openSetup(); },
+  /** Screen rects the tutorial points at. */
+  ui: {
+    target: { x: SBX, y: 20, w: SBW, h: 42 }, score: { x: SBX, y: 66, w: SBW, h: 40 },
+    hand: { x: SBX, y: 110, w: SBW, h: 44 }, rolls: { x: SBX, y: 158, w: SBW, h: 42 },
+    dice: { x: SX0 - 4, y: SY - 4, w: N * SLOT + (N - 1) * GAP + 8, h: SLOT + 8 },
+    die: i => ({ x: slotX(i) - 2, y: SY - 2, w: SLOT + 4, h: SLOT + 4 }),
+    faces: { x: TX + 2, y: SY + SLOT + 1, w: TW - 4, h: 18 },
+    exploit: k => ({ ...xsPos(k), w: XS_W, h: XS_H }),
+    overlay: { x: OX, y: OY, w: OW, h: OH },
+    perks: { x: PSX, y: PSY - 2, w: TW, h: 2 * BADGE_H + 6 },
+    wilds: () => ({ x: wildX0() - 3, y: WY - 3, w: wildSlots(run) * WW + (wildSlots(run) - 1) * WG + 6, h: WH + 6 }),
+    topbar: { x: 52, y: 0, w: 384 - 112, h: 13 },
+    btn: label => { const b = btns.find(q => q.label && q.label.startsWith(label)); return b ? { x: b.x - 2, y: b.y - 2, w: b.w + 4, h: b.h + 6 } : null; },
+  },
 };
 })();

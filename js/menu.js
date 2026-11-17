@@ -277,14 +277,45 @@ function actContinue() {
   goTo('play');
 }
 function actPlay() {
+  if (!SET.tutorialOffered) { offer = { t: 0, sel: 0 }; SFX.select(); termPush('> ./DOKER --FIRST-TIME?'); return; }   // first PLAY: offer the tutorial
   shake = 3; SFX.select();
   termPush('> ./DOKER --NEW-RUN');
   goTo('play');
 }
+/** Start the scripted tutorial run (first-time offer, or OPTIONS > TUTORIAL). */
+function startTutorial() {
+  SET.tutorialOffered = true; saveSettings();
+  SFX.select(); shake = 3;
+  PLAY.startTutorial();
+  goTo('play');
+}
+
+// ---------- first-time offer: play the tutorial? ----------
+let offer = null;
+const OFFER = { x: 92, y: 62, w: 200, h: 96 };
+const OFFER_BTNS = [
+  { x: 104, y: 136, w: 84, h: 14, label: 'SHOW ME', base: '#1e8c4f', hi: '#4dff88', dark: '#0f4d2b', act: () => { offer = null; startTutorial(); } },
+  { x: 196, y: 136, w: 84, h: 14, label: 'SKIP', base: '#3b5dc9', hi: '#7d9bff', dark: '#1f2f6b',
+    act: () => { offer = null; SET.tutorialOffered = true; saveSettings(); shake = 3; SFX.select(); termPush('> ./DOKER --NEW-RUN'); goTo('play'); } },
+];
+const offerHit = (x, y) => OFFER_BTNS.findIndex(b => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h);
+function drawOffer() {
+  offer.t += 1 / 60;
+  ctx.globalAlpha = 0.7; rect(0, 0, W, H, PAL.ink); ctx.globalAlpha = 1;
+  UI.panel(OFFER.x, OFFER.y, OFFER.w, OFFER.h, PAL.green);
+  text('FIRST TIME AT', OFFER.x + OFFER.w / 2, OFFER.y + 6, PAL.green, { align: 'center', scale: 2 });
+  text('THE TABLE?', OFFER.x + OFFER.w / 2, OFFER.y + 22, PAL.green, { align: 'center', scale: 2 });
+  ['THE DEALER CAN WALK YOU THROUGH', 'A SHORT, RIGGED PRACTICE RUN.', 'REPLAY IT ANY TIME FROM OPTIONS.'].forEach((l, k) =>
+    text(l, OFFER.x + OFFER.w / 2, OFFER.y + 42 + k * 9, k === 2 ? '#8a7fc0' : PAL.white, { align: 'center' }));
+  const h = mouse.inside ? offerHit(mouse.x, mouse.y) : -1;
+  if (h >= 0) offer.sel = h;
+  OFFER_BTNS.forEach((b, k) => UI.button(b, offer.sel === k));
+}
 function actOptions() {
   SFX.select();
   termPush('> NANO DOKER.CFG');
-  termPush('> [OPTIONS COMING SOON]');
+  OPTIONS.enter(() => goTo('menu'));
+  goTo('options');
 }
 function actCollection() {
   SFX.select();
@@ -710,7 +741,9 @@ function updateTrans(dt) {
   if (!trans.swapped && trans.t >= TRANS_HALF) {
     trans.swapped = true;
     state = trans.to;
+    if (state !== 'play') TUT.stop();
     if (state === 'play') { PLAY.enter(); MUSIC.play(PLAY.track()); }
+    else if (state === 'options') MUSIC.play('menu');
     else { menuT = 0; refreshButtons(); logo.landed = [0, 0, 0, 0, 0]; MUSIC.play('menu'); }
     glitchT = 0.2;
   }
@@ -748,7 +781,7 @@ let lastHoverBtn = -1;
 function updateHover() {
   hoverBtn = hoverCard = hoverDeco = -1;
   hoverMascot = hoverLogoDie = hoverLogo = false;
-  if (state !== 'menu' || menuT < 1 || !mouse.inside || trans) { lastHoverBtn = -1; return; }
+  if (state !== 'menu' || menuT < 1 || !mouse.inside || trans || offer) { lastHoverBtn = -1; return; }
   const { x, y } = mouse;
   hoverBtn = hitButton(x, y);
   // only blip when the mouse moves onto a *different* button (was firing every frame)
@@ -783,6 +816,7 @@ function update(dt) {
     if (params.has('play')) {
       state = 'play';
       if (!params.has('setup')) PLAY.quickStart(params.get('rig') || 'stock', params.get('stake') || 1);   // dev: skip the rig picker (?setup shows it)
+      if (params.has('tutorial')) PLAY.startTutorial();                                                        // dev: ?play&tutorial
       PLAY.enter();
       // dev-only test hooks: ?play&auto  ?play&perks=6  ?play&shop  ?play&pack=megaperk
       // ?perks=6 (random) or ?perks=backdoor,cronjob (by id)
@@ -813,7 +847,13 @@ function update(dt) {
     else if (params.has('skipboot')) startMenu();
     return;
   }
-  if (state === 'play') { PLAY.update(dt); return; }
+  if (state === 'play') {
+    const n = Math.ceil(SET.speed);           // OPTIONS game speed, in small steps
+    for (let i = 0; i < n; i++) PLAY.update(dt * SET.speed / n);
+    TUT.update(dt);
+    return;
+  }
+  if (state === 'options') { OPTIONS.update(dt); return; }
 
   menuT += dt;
   for (let i = 0; i < btnHoverT.length; i++) btnHoverT[i] += dt;
@@ -852,22 +892,25 @@ function renderMenu() {
   drawSpeech();
   drawTicker();
   drawThrown();
+  if (offer) drawOffer();
 }
 
 function render() {
   rect(0, 0, W, H, '#07061a');
   ctx.save();
-  if (shake > 0) ctx.translate(Math.round(rand(-shake, shake)), Math.round(rand(-shake, shake)));
+  const sk = shake * shakeScale();
+  if (sk > 0) ctx.translate(Math.round(rand(-sk, sk)), Math.round(rand(-sk, sk)));
   if (state === 'boot') renderBoot();
-  else if (state === 'play') PLAY.render();
+  else if (state === 'play') { PLAY.render(); TUT.render(); }
+  else if (state === 'options') { drawBackground(); drawRain(0.22); OPTIONS.render(); drawTicker(); }
   else renderMenu();
   ctx.restore();
-  if (glitchT > 0) postGlitch();
+  if (glitchT > 0 && SET.flashes) postGlitch();
   if (flash > 0) { ctx.globalAlpha = flash; rect(0, 0, W, H, '#ffffff'); ctx.globalAlpha = 1; }
   if (trans) drawWipe();
   if (params.has('ff')) { rect(0, 0, W, 9, '#000000'); text(document.title.slice(0, 63), 1, 1, document.title.startsWith('FF OK') ? PAL.green : PAL.red); }
   if (mouse.inside) {
-    const hot = state === 'play' ? PLAY.hot()
+    const hot = state === 'options' ? OPTIONS.hot() : state === 'play' ? PLAY.hot()
       : state === 'menu' && (hoverBtn >= 0 || hoverMascot || hoverCard >= 0 || hoverDeco >= 0 || hoverLogoDie);
     blit(hot ? CURSOR_HOT : CURSOR, mouse.x, mouse.y);
   }
@@ -879,9 +922,10 @@ window.G = {
   rand, randi, pick, clamp, easeOutBack, easeOutCubic,
   rect, rrect, blit, blitC, text,
   drawBackground, drawRain, drawTicker, goTo,
-  shake: n => { shake = Math.max(shake, n); },
-  glitch: t => { glitchT = Math.max(glitchT, t); },
-  flash: a => { flash = Math.max(flash, a); },
+  shake: n => { shake = Math.max(shake, n); },   // scaled by OPTIONS when drawn
+  glitch: t => { if (SET.flashes) glitchT = Math.max(glitchT, t); },
+  flash: a => { flash = Math.max(flash, a * flashScale()); },
+  toggleFullscreen, startTutorial,
   get T() { return T; },
 };
 
@@ -895,7 +939,9 @@ if (params.has('ff')) {
     const [cx, cy] = pt.split(',').map(Number);
     mouse.x = cx; mouse.y = cy; mouse.inside = true;
     update(1 / 60);
-    if (state === 'play') PLAY.onPointer();
+    if (state === 'play') { if (!TUT.onPointer(cx, cy)) PLAY.onPointer(); }
+    else if (state === 'options') OPTIONS.onPointer(cx, cy);
+    else if (state === 'menu') { const b = hitButton(cx, cy); if (b >= 0) activate(b); }
     for (let i = 0; i < 72; i++) update(1 / 60);
   });
   glitchT = 0; flash = 0; shake = 0;
@@ -953,8 +999,10 @@ addEventListener('pointerdown', e => {
   setMouse(e);
   if (state === 'boot') { if (bootDone()) startMenu(); else bootT = 999; return; }
   if (trans || !mouse.inside) return;
-  if (state === 'play') return PLAY.onPointer(mouse.x, mouse.y);
+  if (state === 'play') { if (TUT.onPointer(mouse.x, mouse.y)) return; return PLAY.onPointer(mouse.x, mouse.y); }
+  if (state === 'options') return OPTIONS.onPointer(mouse.x, mouse.y);
   if (menuT < 1) return;
+  if (offer) { const b = offerHit(mouse.x, mouse.y); if (b >= 0) OFFER_BTNS[b].act(); return; }
   const { x, y } = mouse;
   const b = hitButton(x, y);
   if (b >= 0) return activate(b);
@@ -971,13 +1019,22 @@ addEventListener('keydown', e => {
   startAudio();
   if (state === 'boot') { if (bootDone()) startMenu(); else bootT = 999; return; }
   const k = e.key.toLowerCase();
+  if (state === 'options' && !trans && OPTIONS.typing()) { OPTIONS.onKey(e.key); e.preventDefault(); return; }   // typing CONFIRM
   if (k === 'm') { SFX.muted = !SFX.muted; return; }
   if (k === 'n') { MUSIC.toggle(); return; }
-  if (k === 'c') { document.body.classList.toggle('nocrt'); return; }
+  if (k === 'c') { SET.crt = !SET.crt; applyCrt(); saveSettings(); return; }
   if (k === 'f') { toggleFullscreen(); return; }
   if (trans) return;
-  if (state === 'play') { if (k === ' ' || k === 'enter') e.preventDefault(); return PLAY.onKey(k); }
+  if (state === 'play') { if (k === ' ' || k === 'enter') e.preventDefault(); if (TUT.onKey(k)) return; return PLAY.onKey(k); }
+  if (state === 'options') { if (OPTIONS.onKey(e.key)) e.preventDefault(); return; }
   if (menuT < 1) return;
+  if (offer) {
+    if (k === 'arrowleft' || k === 'arrowright' || k === 'a' || k === 'd' || k === 'tab') { offer.sel = 1 - offer.sel; SFX.hover(); }
+    else if (k === 'enter' || k === ' ') OFFER_BTNS[offer.sel].act();
+    else if (k === 'escape') { offer = null; SFX.select(); }
+    e.preventDefault();
+    return;
+  }
   if (k === 'arrowdown' || k === 's') { kbMode = true; sel = (sel + 1) % BUTTONS.length; btnHoverT[sel] = 0; SFX.hover(); e.preventDefault(); }
   else if (k === 'arrowup' || k === 'w') { kbMode = true; sel = (sel + BUTTONS.length - 1) % BUTTONS.length; btnHoverT[sel] = 0; SFX.hover(); e.preventDefault(); }
   else if (k === 'enter' || k === ' ') { kbMode = true; activate(sel); e.preventDefault(); }
