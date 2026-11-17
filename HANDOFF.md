@@ -29,7 +29,7 @@ Controls: mouse, or **Space** = roll · **Esc** = back to menu · **M** = mute a
 | Decluttered table (no slot labels under dice, no HOUSE OF BONES / TABLE text) | Done |
 | Wildcards: all 19 from DESIGN.md §6, 5 slots on the felt, sell/move, editions, Wildcard Drop pack, slots-full swap in shop | Done |
 | Boss firewalls: rounds 4 + 8 get ENCRYPTION / LAG / SANDBOX / DDOS / HONEYPOT, warned one round early | Done |
-| Announcer voice (ElevenLabs) for STRAIGHT / FULL HOUSE / FOUR OF A KIND / DOKER, 3 takes each in `assets/voice/` | Done |
+| Announcer voice (ElevenLabs) — only DOKER is voiced (user's call); straight/full/four takes kept in `assets/voice/` but unused | Done |
 | DOKER!! event (five of a kind): cutscene, DOKER party track, announcer scream | Done |
 | Boss characters (`js/boss.js`, sprites in `js/bossart.js`): intro cutscene, live on the felt, physically enforce their rule | Done |
 | Exploits, upgradable dice, starting rigs, Dealer reactions | Planned |
@@ -112,7 +112,8 @@ Example: `index.html?play&perks=14&auto&ff=60`
 - Voice: **DOKER Arcade Announcer** (designed voice, saved in the user's ElevenLabs account; id in `assets/voice/voice.json`),
   picked in an audition (`audition/`, git-ignored). Model `eleven_v3`, stability 0 (creative), audio tags like `[excited]`.
 - API key: the same file the user's UFC project uses, `~/.config/university-football/elevenlabs.key` — never copy it into this repo.
-- Only the big hands are called (user's choice): STRAIGHT, FULL HOUSE, FOUR OF A KIND, DOKER. `VOICE.play(key)` in `js/audio.js`
+- Only DOKER (five of a kind) is voiced — the user tried calls on every big hand and cut them back to just DOKER.
+  The straight/full/four takes are still in `assets/voice/` if that changes. `VOICE.play(key)` in `js/audio.js`
   picks a random take and ducks the music. Lines/scripts: `assets/voice/voice.json`.
 
 ## Git

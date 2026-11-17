@@ -248,7 +248,6 @@ function startScoring() {
   at(t, () => {
     cur.chips = sc.base.chips; cur.mult = sc.base.mult; cur.cp = 1; cur.mp = 1;
     SFX.hand(h.tier);
-    if (!isDoker) VOICE.play(sc.key);          // the announcer calls the big hands
     if (h.tier >= 3) for (let i = 0; i < N; i++) if (dice[i].scoring) burst(i, 8, 1.4);
     if (h.tier >= 5) { G.flash(0.25); G.shake(3); }
     if (h.tier === 7) { G.glitch(0.7); G.flash(0.6); }
