@@ -781,7 +781,9 @@ function update(dt) {
   if (state === 'boot') {
     bootT += dt;
     if (params.has('play')) {
-      state = 'play'; PLAY.enter();
+      state = 'play';
+      if (!params.has('setup')) PLAY.quickStart(params.get('rig') || 'stock', params.get('stake') || 1);   // dev: skip the rig picker (?setup shows it)
+      PLAY.enter();
       // dev-only test hooks: ?play&auto  ?play&perks=6  ?play&shop  ?play&pack=megaperk
       // ?perks=6 (random) or ?perks=backdoor,cronjob (by id)
       if (params.has('perks')) {

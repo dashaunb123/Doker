@@ -18,7 +18,8 @@ const OX = TX + 20, OW = TW - 40, OY = 34, OH = 124;  // overlay panel
 const PSX = TX, PSY = 174, BADGE_W = 24, BADGE_H = 11, BADGE_GAP = 3, BADGES_PER_ROW = 10;
 const CHIPS_BOX = { x: SBX + 4 + 19, y: 120 }, MULT_BOX = { x: SBX + SBW - 4 - 19, y: 120 };
 const WW = 40, WH = 28, WG = 6, WY = 25;                                  // wildcard row on the felt
-const WX0 = TX + Math.floor((TW - (WILD_SLOTS * WW + (WILD_SLOTS - 1) * WG)) / 2);
+/** x of wildcard slot i (BOTNET has 6 slots, BURNER 4). */
+const wildX0 = () => { const n = run ? wildSlots(run) : WILD_SLOTS; return TX + Math.floor((TW - (n * WW + (n - 1) * WG)) / 2); };
 
 // ---------- timings ----------
 const AIR = 0.62, SETTLE = 0.42, STAGGER = 0.2, FLIPS = 5, INTRO = 1.5;
@@ -48,7 +49,9 @@ let dokerEv = null, forceFaces = null;
 // HACK WINDOW: after the dice land (and the boss has had its turn) you may fire exploits before the roll scores
 let hack = null;             // { sel: exploit index | -1, step: null|'die'|'face'|'nudge'|'target', die, src }
 let hbtns = [], hoverHB = -1, prevHoverHB = -1, hoverX = -1, prevHoverX = -1;
-const XS_W = 40, XS_H = 26, XS_X = TX + TW - XS_W - 4, XS_Y = [TY + TH - 2 * XS_H - 6, TY + TH - XS_H - 3];          // the DOKER!! event (five of a kind): { t, face, parts }
+const XS_W = 40, XS_H = 26, XS_X = TX + TW - XS_W - 4, XS_Y = [TY + TH - 2 * XS_H - 6, TY + TH - XS_H - 3];
+/** Exploit slot k: two stacked in the bottom-right corner; ROOT's 3rd goes bottom-left. */
+const xsPos = k => (k < 2 ? { x: XS_X, y: XS_Y[k] } : { x: TX + 4, y: XS_Y[1] });          // the DOKER!! event (five of a kind): { t, face, parts }
 const DOKER_LEN = 3.6;
 
 // ---------- autosave (so a crash or a trip to the menu never wipes a run) ----------
@@ -62,12 +65,12 @@ function loadSave() {
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } }
 
 const slotX = i => SX0 + i * (SLOT + GAP);
-const wildX = i => WX0 + i * (WW + WG);
+const wildX = i => wildX0() + i * (WW + WG);
 const canEditWilds = () => mode === 'ready' || mode === 'intro';
 /** The look of die i at rest: its mod (gold/glass/neon/weighted) or plain bone. */
 const dieTheme = i => (run && dieMod(run, i)) || 'bone';
 /** Which music should be playing: the boss's own track while it's alive. */
-const track = () => (run && run.boss && BOSS.active() && mode !== 'shop' ? 'boss_' + run.boss : 'table');
+const track = () => (run && mode !== 'setup' && run.boss && BOSS.active() && mode !== 'shop' ? 'boss_' + run.boss : 'table');
 /** What the boss actor (js/boss.js) is allowed to touch on the table. */
 const bossHooks = {
   TX, TY, TW, TH, dieX: i => dieX(i), dieTop: SY + 6, resultY: 120,
@@ -142,7 +145,8 @@ function enter() {
   }));
   if (pendingContinue && continueRun()) { pendingContinue = false; return; }
   pendingContinue = false;
-  newRun();
+  if (devQuick) { devQuick = false; newRun(devRig.rig, devRig.stake); return; }
+  openSetup();
 }
 
 /** Resume the autosaved run. Returns false if there is nothing (valid) to resume. */
@@ -173,18 +177,32 @@ function continueRun() {
   return true;
 }
 
-function newRun() {
+function newRun(rig = 'stock', stake = 1) {
   run = {
-    round: 0, target: 0, score: 0, rollsLeft: 0, rollsRound: 0, money: RULES.START_MONEY, rollsUsed: 0,
+    rig, stake,
+    round: 0, target: 0, score: 0, rollsLeft: 0, rollsRound: 0, money: rig === 'whale' ? 20 : RULES.START_MONEY, rollsUsed: 0,
     levels: {}, bonus: {}, perks: [], wilds: [], hot: 0, pity: 0, prevKey: null, hotShieldUsed: false, phantom: 0, seenKeys: [], exploits: [], dieMods: [null, null, null, null, null], dieStickers: [null, null, null, null, null], ember: [0, 0, 0, 0, 0], injectChips: 0,
-    bosses: rollBosses(), boss: null, ddosDie: -1,
+    bosses: rollBosses(stake), boss: null, ddosDie: -1,
   };
+  // rig loadouts
+  if (rig === 'goldbug') run.dieMods = ['gold', 'gold', 'gold', 'gold', 'gold'];
+  if (rig === 'glasscannon') run.dieMods = ['glass', 'glass', 'glass', 'glass', 'glass'];
+  if (rig === 'scriptkiddie') {
+    applyItem(run, makePerk(_pick(PERK_IDS), Math.random() < 0.7 ? 0 : 1));
+    applyItem(run, makeExploit(_pick(EXPLOIT_IDS)));
+  }
+  if (rig === 'botnet') applyItem(run, makeWild(_pick(WILD_IDS.filter(w => WILD_DEFS[w].rarity === 0)), null));
+  if (rig === 'root') applyItem(run, makeExploit('force'));
+  dice.forEach((d, i) => (d.theme = dieTheme(i)));
   startRound(1);
 }
 
 function startRound(r) {
   run.round = r;
-  run.target = RULES.target(r);
+  run.target = targetFor(run, r);
+  run.bustCount = 0;
+  // ICE (stake 5+): normal firewalls from round 2 get a small rule; on SINGULARITY bosses bring one too
+  run.ice = stakeOf(run) >= 5 && r >= 2 && (!bossOf(run, r) || stakeOf(run) >= 8) ? _pick(ICE_IDS) : null;
   run.score = 0; shownScore = 0;
   run.boss = bossOf(run);
   const av = run.boss && wildsOf(run, 'antivirus')[0];
@@ -230,7 +248,7 @@ function rollAll() {
 /** Throw all five dice (a normal roll, or a free NUKE reroll). */
 function launchDice() {
   const w = dieWeights(run);
-  run.phantom = wildsOf(run, 'phantom').length ? rollFace(w) : 0;
+  run.phantom = wildsOf(run, 'phantom').length || run.rig === 'phantom' ? rollFace(w) : 0;
   run.quantumDie = wildsOf(run, 'quantum').length ? G.randi(0, N - 1) : -1;
   dice.forEach(d => (d.dropped = false));
   const finals = forceFaces ? forceFaces.slice() : dice.map((_, i) => rollFace(dieWeightsFor(run, i, w)));
@@ -309,7 +327,7 @@ function startScoring() {
       const st = dieSticker(run, i);
       if (st === 'red') { cur.chips += cv; floats.push({ x: dieX(i), y: SY - 28, txt: 'AGAIN +' + cv, col: PAL.red, life: 1 }); SFX.chip(i + 1); }
       if (st === 'blue' && sc.key === 'doker' && sc.scoring[i]) { run.rollsLeft++; floats.push({ x: dieX(i), y: SY - 28, txt: '+1 ROLL', col: '#4f9bff', life: 1.2 }); }
-      if (st === 'purple' && sc.scoring[i] && HANDS[sc.key].tier >= 6 && run.exploits.length < EXPLOIT_SLOTS) {
+      if (st === 'purple' && sc.scoring[i] && HANDS[sc.key].tier >= 6 && run.exploits.length < exploitSlots(run)) {
         const ex = makeExploit(_pick(EXPLOIT_IDS)); applyItem(run, ex);
         floats.push({ x: dieX(i), y: SY - 28, txt: 'GOT ' + EXPLOIT_DEFS[ex.id].name, col: '#b46bff', life: 1.3 });
       }
@@ -350,6 +368,10 @@ function startScoring() {
       popPerk(w); wildFloat(w, 'GHOST', '#b6ffcc');
     }
     if (sc.key !== 'bust' && cur.total > 0) run.lastTotal = cur.total;
+    if (run.ice === 'cold' && run.rollsRound === 1 && cur.total > 0) {
+      cur.total = Math.round(cur.total / 2);
+      floats.push({ x: CX, y: 104, txt: 'COLD BOOT: HALF', col: PAL.cyan, life: 1.2 });
+    }
     cur.showTotal = true; cur.tp = 1;
     if (honeypot) { floats.push({ x: CX, y: 104, txt: 'HONEYPOT!', col: PAL.red, life: 1.4, big: true }); SFX.deny(); G.glitch(0.4); BOSS.bite(); }
     const power = cur.total / run.target;
@@ -360,6 +382,12 @@ function startScoring() {
   at(t, () => {
     run.score = Math.max(0, run.score + cur.total); SFX.coin(); afterRoll(run, sc.key, faces);
     for (let i = 0; i < N; i++) if (dieMod(run, i) === 'ember' && !sc.scoring[i]) run.ember[i] = 0;
+    // TRACE (stake 7+): every 3rd bust raises the target 10%
+    if (sc.key === 'bust' && stakeOf(run) >= 7 && ++run.bustCount % 3 === 0) {
+      run.target = Math.round(run.target * 1.1 / 10) * 10;
+      floats.push({ x: SBX + SBW / 2, y: 50, txt: 'TRACED! +10%', col: PAL.magenta, life: 1.4 });
+      SFX.deny(); G.glitch(0.2);
+    }
     // BACKDOOR: the first bust(s) each firewall don't use a roll
     if (sc.key === 'bust') {
       const free = perksOf(run, 'backdoor').reduce((a, p) => a + p.stats.amt, 0);
@@ -614,13 +642,14 @@ function breach() {
   setMode('cleared');
   BOSS.defeat();
   const rows = [['BREACH REWARD', RULES.reward(run.round)]];
-  if (run.rollsLeft > 0) rows.push(['UNUSED ROLLS X' + run.rollsLeft, run.rollsLeft]);
+  if (run.rollsLeft > 0 && stakeOf(run) < 4) rows.push(['UNUSED ROLLS X' + run.rollsLeft, run.rollsLeft]);
+  if (run.ice === 'tax') rows.push(['ICE TAX', -2]);
   const intr = interestFor(run);
   if (intr > 0) rows.push(['COMPOUND INTEREST', intr]);
   if (run.boss) rows.push(['BOSS BOUNTY', BOSS_BOUNTY]);
   for (const p of perksOf(run, 'speedrun')) if (run.rollsLeft >= p.stats.left) rows.push(['SPEEDRUN', p.stats.amt]);
   for (const w of wildsOf(run, 'snakeoil')) w.state.bonus = (w.state.bonus || 0) + 1;
-  for (const w of wildsOf(run, 'deaddrop')) if (run.exploits.length < EXPLOIT_SLOTS) {
+  for (const w of wildsOf(run, 'deaddrop')) if (run.exploits.length < exploitSlots(run)) {
     const ex = makeExploit(_pick(EXPLOIT_IDS)); applyItem(run, ex);
     wildFloat(w, 'DROP: ' + EXPLOIT_DEFS[ex.id].name, '#b46bff');
   }
@@ -631,7 +660,7 @@ function breach() {
   G.flash(0.35); G.glitch(0.25);
   for (let i = 0; i < N; i++) burst(i, 14, 1.8);
   rows.forEach((_, i) => at(0.45 + i * 0.3, () => { reward.shown = i + 1; SFX.coin(); }));
-  at(0.45 + rows.length * 0.3, () => { reward.shown = rows.length + 1; run.money += reward.total; SFX.select(); saveRun('cleared'); });
+  at(0.45 + rows.length * 0.3, () => { reward.shown = rows.length + 1; run.money = Math.max(0, run.money + reward.total); SFX.select(); saveRun('cleared'); });
 }
 
 function fail() {
@@ -644,9 +673,91 @@ function fail() {
 
 function nextFirewall() {
   SFX.select();
-  if (run.round >= RULES.ROUNDS) { clearSave(); setMode('won'); SFX.hand(7); G.flash(0.7); G.glitch(0.5); return; }
+  if (run.round >= RULES.ROUNDS) {
+    clearSave(); run.unlocked = recordWin(run.rig || 'stock', stakeOf(run));
+    setMode('won'); SFX.hand(7); G.flash(0.7); G.glitch(0.5); return;
+  }
   G.glitch(0.3); SFX.whoosh();
   openShop(null);
+}
+
+// ------------------------------------------------------------
+//  RUN SETUP: pick a rig and a stake
+// ------------------------------------------------------------
+let setup = { rig: 0, stake: 1 }, profile = null;
+let devQuick = false, devRig = { rig: 'stock', stake: 1 };
+function openSetup() {
+  profile = loadProfile();
+  setup.stake = Math.min(setup.stake, maxStake(RIGS[setup.rig].id));
+  setMode('setup');
+  MUSIC.play('table');
+}
+const maxStake = rig => { let s2 = 1; while (s2 < STAKES.length && stakeUnlocked(profile, rig, s2 + 1)) s2++; return s2; };
+function setupMove(dr, ds) {
+  if (dr) { setup.rig = (setup.rig + dr + RIGS.length) % RIGS.length; setup.stake = Math.min(setup.stake, maxStake(RIGS[setup.rig].id)); }
+  if (ds) setup.stake = G.clamp(setup.stake + ds, 1, STAKES.length);
+  SFX.hover();
+}
+function setupStart() {
+  const rig = RIGS[setup.rig].id;
+  if (!rigUnlocked(profile, rig) || !stakeUnlocked(profile, rig, setup.stake)) { SFX.deny(); return; }
+  SFX.select(); G.glitch(0.3);
+  newRun(rig, setup.stake);
+}
+function drawSetup() {
+  const { rect, rrect, text, ctx, T } = G;
+  const r = RIGS[setup.rig], open = rigUnlocked(profile, r.id), st = STAKES[setup.stake - 1];
+  const stOpen = open && stakeUnlocked(profile, r.id, setup.stake);
+  btns = [];
+  drawTable();
+  ctx.globalAlpha = 0.55; rect(TX, TY, TW, TH, '#05030c'); ctx.globalAlpha = 1;
+  text('CHOOSE YOUR RIG', CX, TY + 5, PAL.green, { align: 'center', scale: 2, outline: PAL.ink });
+  // rig card
+  const cx0 = TX + 26, cw = TW - 52, cy0 = TY + 24;
+  rrect(cx0 - 1, cy0 - 1, cw + 2, 66, open ? PAL.gold : '#3a3550');
+  rrect(cx0, cy0, cw, 64, '#120e28');
+  text(r.name, CX, cy0 + 5, open ? PAL.white : '#5a5478', { align: 'center', scale: 2, outline: PAL.ink });
+  wrapText(open ? r.desc : 'LOCKED: ' + unlockHint(r.id), 34).forEach((l, k) => text(l, CX, cy0 + 23 + k * 9, open ? '#c9c3ea' : PAL.red, { align: 'center' }));
+  // starting dice preview
+  const mods = r.id === 'goldbug' ? 'gold' : r.id === 'glasscannon' ? 'glass' : 'bone';
+  const nd = r.id === 'phantom' ? 6 : 5, dx0 = CX - (nd * 20 - 4) / 2;
+  for (let i = 0; i < nd; i++) {
+    ctx.globalAlpha = (open ? 1 : 0.3) * (i === 5 ? 0.45 : 1);
+    ctx.drawImage(i === 5 ? tinted(DIE.bone[6], PAL.cyan) : DIE[mods][(i % 6) + 1], dx0 + i * 20, cy0 + 44, 16, 16);
+  }
+  ctx.globalAlpha = 1;
+  // best-stake stickers on the card
+  const best = profile.best[r.id] || 0;
+  for (let k = 0; k < STAKES.length; k++) rect(cx0 + cw - 6 - (STAKES.length - k) * 7, cy0 + 4, 5, 5, k < best ? STAKES[k].col : '#241a4a');
+  // arrows
+  btns.push({ x: TX + 4, y: cy0 + 24, w: 18, h: 15, label: '<', act: () => setupMove(-1, 0), ...UI.BTN.blue });
+  btns.push({ x: TX + TW - 22, y: cy0 + 24, w: 18, h: 15, label: '>', act: () => setupMove(1, 0), ...UI.BTN.blue });
+  // stake selector
+  const sy = cy0 + 72;
+  btns.push({ x: CX - 92, y: sy, w: 18, h: 13, label: '<', act: () => setupMove(0, -1), ...UI.BTN.blue });
+  btns.push({ x: CX + 74, y: sy, w: 18, h: 13, label: '>', act: () => setupMove(0, 1), ...UI.BTN.blue });
+  rect(CX - 68, sy + 3, 7, 7, st.col);
+  text('STAKE ' + setup.stake + ': ' + st.name, CX + 4, sy + 3, stOpen ? st.col : '#5a5478', { align: 'center' });
+  const stakeNote = stOpen ? st.desc + (setup.stake > 1 ? ' (PLUS EVERYTHING BELOW)' : '')
+    : !open ? 'UNLOCK THIS RIG FIRST'
+    : 'LOCKED: BEAT ' + STAKES[setup.stake - 2].name + ' WITH THIS RIG';
+  text(stakeNote, CX, sy + 18, stOpen ? '#a99be0' : PAL.red, { align: 'center' });
+  btns.push({ x: CX - 50, y: TY + TH - 19, w: 100, h: 14, label: 'START RUN >', act: setupStart, ...UI.BTN.green, disabled: !stOpen });
+  btns.forEach((b, i) => UI.button(b, hoverBtn === i));
+}
+function drawSetupSidebar() {
+  const { text } = G;
+  const x = SBX + 4;
+  UI.panel(SBX, 20, SBW, 180, PAL.green);
+  text('RIGS', x, 24, '#8a7fc0');
+  RIGS.forEach((r, k) => {
+    const open = rigUnlocked(profile, r.id), best = profile.best[r.id] || 0;
+    const y = 36 + k * 13, on = k === setup.rig;
+    text((on ? '>' : ' ') + r.name, x, y, on ? PAL.gold : open ? PAL.white : '#3f3570');
+    if (best) G.rect(SBX + SBW - 10, y + 1, 5, 5, STAKES[best - 1].col);
+  });
+  text('ARROWS PICK', x, 160, '#5a4c99');
+  text('ENTER STARTS', x, 170, '#5a4c99');
 }
 
 function openShop(snap) {
@@ -713,6 +824,14 @@ function update(dt) {
   menuHover = m.inside && m.x >= 3 && m.x < 50 && m.y >= 1 && m.y < 14;
   if (menuHover && !prevMenuHover) SFX.hover();
   prevMenuHover = menuHover;
+  if (mode === 'setup') {
+    hoverBtn = -1;
+    if (m.inside) btns.forEach((b, i) => { if (UI.hitBox(b, m.x, m.y)) hoverBtn = i; });
+    if (hoverBtn !== prevHoverBtn && hoverBtn >= 0) SFX.hover();
+    prevHoverBtn = hoverBtn;
+    updateFx(dt);
+    return;
+  }
 
   if (mode === 'shop') { SHOP.update(dt); updateFx(dt); return; }
   BOSS.update(dt);
@@ -725,7 +844,7 @@ function update(dt) {
     wbtns.forEach((b, i) => { if (UI.hitBox(b, m.x, m.y)) hoverWBtn = i; });
     hbtns.forEach((b, i) => { if (UI.hitBox(b, m.x, m.y)) hoverHB = i; });
     if (!isOverlay() && hoverHB < 0)
-      run.exploits.forEach((_, k) => { if (m.x >= XS_X && m.x < XS_X + XS_W && m.y >= XS_Y[k] && m.y < XS_Y[k] + XS_H) hoverX = k; });
+      run.exploits.forEach((_, k) => { const q = xsPos(k); if (m.x >= q.x && m.x < q.x + XS_W && m.y >= q.y && m.y < q.y + XS_H) hoverX = k; });
     if (mode === 'hack' && hack && (hack.step === 'die' || hack.step === 'target') && hoverHB < 0)
       for (let i = 0; i < N; i++) {
         const x = slotX(i);
@@ -807,8 +926,10 @@ function update(dt) {
 }
 
 function updateFx(dt) {
-  shownScore += (run.score - shownScore) * Math.min(1, dt * 7);
-  if (Math.abs(run.score - shownScore) < 0.5) shownScore = run.score;
+  if (run) {   // no run yet while you're on the rig picker
+    shownScore += (run.score - shownScore) * Math.min(1, dt * 7);
+    if (Math.abs(run.score - shownScore) < 0.5) shownScore = run.score;
+  }
   if (cur) { cur.cp = Math.max(0, cur.cp - dt * 5); cur.mp = Math.max(0, cur.mp - dt * 5); cur.tp = Math.max(0, cur.tp - dt * 3); }
   for (const [k, v] of badgePop) { if (v - dt * 3 <= 0) badgePop.delete(k); else badgePop.set(k, v - dt * 3); }
   for (const p of parts) { p.vy += 420 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; }
@@ -844,7 +965,7 @@ function drawSidebar() {
   text(bossR ? (inShop ? 'NEXT: BOSS' : 'BOSS') : inShop ? 'NEXT UP' : 'FIREWALL', x, 24, bossR ? PAL.red : '#8a7fc0');
   text(r + '/' + RULES.ROUNDS, R, 24, PAL.green, { align: 'right' });
   text('TARGET', x, 35, '#8a7fc0');
-  UI.boxNum(fmtNum(RULES.target(r)), SBX + SBW / 2, 45, SBW, PAL.gold);
+  UI.boxNum(fmtNum(inShop ? targetFor(run, r) : run.target), SBX + SBW / 2, 45, SBW, PAL.gold);
 
   // round score + progress
   const done = run.score >= run.target;
@@ -920,7 +1041,7 @@ function drawPerkTip() {
 // ------------------------------------------------------------
 function drawWildRow() {
   const { rect, rrect, text, ctx, T } = G;
-  for (let i = 0; i < WILD_SLOTS; i++) {
+  for (let i = 0; i < wildSlots(run); i++) {
     const x = wildX(i), w = run.wilds[i];
     if (!w) {
       ctx.globalAlpha = 0.5;
@@ -955,8 +1076,8 @@ function drawExploits() {
   const { rect, rrect, text, ctx, T } = G;
   hbtns = [];
   const any = run.exploits.length > 0;
-  for (let k = 0; k < EXPLOIT_SLOTS; k++) {
-    const x = XS_X, y = XS_Y[k], ex = run.exploits[k];
+  for (let k = 0; k < exploitSlots(run); k++) {
+    const { x, y } = xsPos(k), ex = run.exploits[k];
     if (!ex) {
       if (!any) continue;
       ctx.globalAlpha = 0.5;
@@ -1184,6 +1305,7 @@ function drawIntro() {
   rect(TX + dx, by, TW, 1, acc); rect(TX + dx, by + bh - 1, TW, 1, acc);
   text((boss ? 'BOSS: ' + boss.name : 'FIREWALL ' + run.round + '/' + RULES.ROUNDS), CX + dx, by + 5, boss ? PAL.red : PAL.white, { align: 'center', scale: 2, shadow: PAL.ink });
   if (boss) text(boss.text, CX + dx, by + 22, PAL.white, { align: 'center' });
+  else if (run.ice) text('ICE ' + ICE[run.ice].name + ': ' + ICE[run.ice].text, CX + dx, by - 10, PAL.cyan, { align: 'center', outline: PAL.ink });
   text('TARGET ' + fmtNum(run.target) + '  //  ' + run.rollsLeft + ' ROLLS', CX + dx, by + bh - 11, acc, { align: 'center' });
   ctx.restore();
 }
@@ -1227,16 +1349,17 @@ function drawOverlay() {
     text('SHORT BY ' + fmtNum(run.target - run.score), CX, y0 + 58, PAL.gold, { align: 'center' });
     text(run.perks.length + ' PERKS OWNED', CX, y0 + 70, '#8a7fc0', { align: 'center' });
     if (modeT > 0.8) {
-      btns.push({ x: CX - 66, y: y0 + 98, w: 62, h: 15, label: 'RETRY', act: () => { SFX.select(); newRun(); }, ...UI.BTN.green });
+      btns.push({ x: CX - 66, y: y0 + 98, w: 62, h: 15, label: 'RETRY', act: () => { SFX.select(); newRun(run.rig, run.stake); }, ...UI.BTN.green });
       btns.push({ x: CX + 4, y: y0 + 98, w: 62, h: 15, label: 'MENU', act: () => { SFX.select(); G.goTo('menu'); }, ...UI.BTN.blue });
     }
   } else if (mode === 'won') {
     text('SYSTEM ROOTED', CX, y0 + 8, PAL.magenta, { align: 'center', scale: 2, outline: PAL.ink, wave: 1, t: T });
     text('ALL ' + RULES.ROUNDS + ' FIREWALLS BREACHED', CX, y0 + 32, PAL.white, { align: 'center' });
     text('CREDITS $' + run.money, CX, y0 + 46, PAL.gold, { align: 'center' });
-    text('ROLLS USED ' + run.rollsUsed + ' // ' + run.perks.length + ' PERKS', CX, y0 + 58, '#a99be0', { align: 'center' });
+    text(RIG[run.rig || 'stock'].name + ' // ' + STAKES[stakeOf(run) - 1].name, CX, y0 + 58, STAKES[stakeOf(run) - 1].col, { align: 'center' });
+    (run.unlocked || []).slice(0, 2).forEach((u, k) => text('UNLOCKED ' + u, CX, y0 + 70 + k * 10, PAL.green, { align: 'center', wave: 1, t: T }));
     if (modeT > 0.8) {
-      btns.push({ x: CX - 66, y: y0 + 98, w: 62, h: 15, label: 'NEW RUN', act: () => { SFX.select(); newRun(); }, ...UI.BTN.green });
+      btns.push({ x: CX - 66, y: y0 + 98, w: 62, h: 15, label: 'NEW RUN', act: () => { SFX.select(); openSetup(); }, ...UI.BTN.green });
       btns.push({ x: CX + 4, y: y0 + 98, w: 62, h: 15, label: 'MENU', act: () => { SFX.select(); G.goTo('menu'); }, ...UI.BTN.blue });
     }
   }
@@ -1257,8 +1380,11 @@ function drawHUD() {
   } else {
     const nb = bossOf(run, run.round + 1);
     if (nb) text('BOSS NEXT: ' + BOSSES[nb].name + ' // ' + BOSSES[nb].short, HX, 4, PAL.orange, { align: 'center' });
+    else if (mode !== 'shop' && run.ice) text('ICE ' + ICE[run.ice].name + ': ' + ICE[run.ice].text, HX, 4, PAL.cyan, { align: 'center' });
   }
-  text('RUN $' + run.money, W - 5, 4, PAL.gold, { align: 'right' });
+  const st = STAKES[stakeOf(run) - 1];
+  G.rect(W - 9, 5, 5, 5, st.col);
+  text(RIG[run.rig || 'stock'].name, W - 12, 4, '#a99be0', { align: 'right' });
 }
 
 function drawFx() {
@@ -1291,6 +1417,16 @@ function render() {
     drawSidebar();
     drawHUD();
     drawFloats();
+    return;
+  }
+  if (mode === 'setup') {
+    drawSetup();
+    drawSetupSidebar();
+    const { rect, rrect, W } = G;
+    rect(0, 0, W, 15, PAL.ink); rect(0, 15, W, 1, PAL.purple);
+    rrect(3, 2, 46, 11, menuHover ? PAL.green : '#2e2260');
+    G.text('< MENU', 6, 4, menuHover ? PAL.ink : PAL.white);
+    G.drawTicker(TICK);
     return;
   }
 
@@ -1338,6 +1474,7 @@ function render() {
 // ------------------------------------------------------------
 function onPointer() {
   if (menuHover) { SFX.select(); G.goTo('menu'); return; }
+  if (mode === 'setup') { const b = btns[hoverBtn]; if (b) { if (b.disabled) SFX.deny(); else b.act(); } return; }
   if (mode === 'shop') { SHOP.onPointer(); return; }
   if (mode === 'bossintro') { BOSS.skip(); return; }
   if (dokerEv) { skipDoker(); return; }
@@ -1358,6 +1495,14 @@ function onPointer() {
 }
 function onKey(k) {
   if (k === 'escape' || k === 'backspace') { SFX.select(); G.goTo('menu'); return; }
+  if (mode === 'setup') {
+    if (k === 'arrowleft' || k === 'a') setupMove(-1, 0);
+    else if (k === 'arrowright' || k === 'd') setupMove(1, 0);
+    else if (k === 'arrowup' || k === 'w') setupMove(0, 1);
+    else if (k === 'arrowdown' || k === 's') setupMove(0, -1);
+    else if (k === ' ' || k === 'enter') setupStart();
+    return;
+  }
   if (mode === 'shop') { SHOP.onKey(k); return; }
   if (k !== ' ' && k !== 'enter') return;
   if (mode === 'bossintro') { BOSS.skip(); return; }
@@ -1368,7 +1513,7 @@ function onKey(k) {
   if (mode === 'intro' && enterT > 1) { setMode('ready'); return; }
   rollAll();
 }
-const hot = () => menuHover || (mode === 'shop' ? SHOP.hot() : hover >= 0 || hoverBtn >= 0 || hoverPerk >= 0 || hoverWild >= 0 || !!wbtns[hoverWBtn] || hoverX >= 0 || !!hbtns[hoverHB]);
+const hot = () => menuHover || (mode === 'setup' ? !!btns[hoverBtn] : mode === 'shop' ? SHOP.hot() : hover >= 0 || hoverBtn >= 0 || hoverPerk >= 0 || hoverWild >= 0 || !!wbtns[hoverWBtn] || hoverX >= 0 || !!hbtns[hoverHB]);
 
 return {
   enter, update, render, onPointer, onKey, hot, rollAll,
@@ -1376,10 +1521,13 @@ return {
   // dev hooks for testing
   get run() { return run; },
   debugShop() { openShop(null); },
+  /** dev: the next enter() starts a run straight away (skips the setup screen) */
+  quickStart(rig = 'stock', stake = 1) { devQuick = true; devRig = { rig: RIG[rig] ? rig : 'stock', stake: G.clamp(+stake || 1, 1, STAKES.length) }; },
+  get mode() { return mode; },
   get dbg() { return { mode, dice, hack }; },
   debugStickers(ids) { ids.forEach((id, i) => { if (STICKER_DEFS[id] && i < 5) run.dieStickers[i] = id; }); },
   debugMods(ids) { ids.forEach((id, i) => { if (DIEMOD_DEFS[id] && i < 5) { run.dieMods[i] = id; dice[i].theme = id; } }); },
-  debugExploits(ids) { ids.forEach(id => EXPLOIT_DEFS[id] && run.exploits.length < EXPLOIT_SLOTS && applyItem(run, makeExploit(id))); },
+  debugExploits(ids) { ids.forEach(id => EXPLOIT_DEFS[id] && run.exploits.length < exploitSlots(run) && applyItem(run, makeExploit(id))); },
   /** dev: force the next roll to be five of a kind */
   debugDoker(face = 6) { forceFaces = [face, face, face, face, face]; },
   track,

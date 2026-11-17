@@ -451,6 +451,76 @@ function rollItems(n, pool, boost = 1) {
 }
 
 // ============================================================
+//  RIGS (starting loadouts) + STAKES (difficulty ladder per rig)
+// ============================================================
+const RIGS = [
+  { id: 'stock',        name: 'STOCK',         desc: 'THE STANDARD RIG. NO TRICKS, NO CATCHES.' },
+  { id: 'burner',       name: 'BURNER',        desc: '+1 ROLL EVERY FIREWALL, BUT ONE FEWER WILDCARD SLOT.' },
+  { id: 'whale',        name: 'WHALE',         desc: 'START WITH $20, BUT EVERYTHING IN THE SHOP COSTS $1 MORE.' },
+  { id: 'scriptkiddie', name: 'SCRIPT KIDDIE', desc: 'START WITH A RANDOM PERK AND A RANDOM EXPLOIT.', needs: 'stock' },
+  { id: 'goldbug',      name: 'GOLDBUG',       desc: 'ALL FIVE DICE START GOLD. DIE MODS COST $2 MORE.', needs: 'whale' },
+  { id: 'glasscannon',  name: 'GLASS CANNON',  desc: 'ALL FIVE DICE START GLASS. HUGE MULT, THEY KEEP BREAKING.', needs: 'goldbug' },
+  { id: 'botnet',       name: 'BOTNET',        desc: '6 WILDCARD SLOTS AND A FREE WILDCARD. PERKS COST $1 MORE.', needs: 'scriptkiddie' },
+  { id: 'phantom',      name: 'PHANTOM',       desc: 'A PERMANENT GHOST 6TH DIE FOR PAIRS AND KINDS, BUT ONLY 8 ROLLS.', needs: 'botnet' },
+  { id: 'root',         name: 'ROOT',          desc: '3 EXPLOIT SLOTS, AND YOU START HOLDING FORCE.', needs: 'stake4' },
+];
+const RIG = Object.fromEntries(RIGS.map(r => [r.id, r]));
+// each stake keeps every rule below it
+const STAKES = [
+  { name: 'WHITE HAT',   col: '#f4f4f4', desc: 'THE NORMAL GAME.' },
+  { name: 'GREY HAT',    col: '#a9a9bd', desc: 'AN EXTRA BOSS ON FIREWALL 6.' },
+  { name: 'BLACK HAT',   col: '#5a5478', desc: 'TARGETS ARE 25% HIGHER.' },
+  { name: 'ZERO DAY',    col: '#e43b44', desc: 'UNUSED ROLLS NO LONGER PAY $1.' },
+  { name: 'ICE',         col: '#2ce8f5', desc: 'NORMAL FIREWALLS GET A SMALL ICE RULE.' },
+  { name: 'HONEYNET',    col: '#feae34', desc: 'SHOP PRICES +$1. REROLLS START AT $3.' },
+  { name: 'TRACE',       col: '#ff3df2', desc: 'EVERY 3RD BUST RAISES THE TARGET BY 10%.' },
+  { name: 'SINGULARITY', col: '#4dff88', desc: 'ONLY 9 ROLLS. BOSSES ALSO BRING AN ICE RULE.' },
+];
+// small rules for ICE (stake 5+): normal firewalls, and bosses on SINGULARITY
+const ICE = {
+  cold:  { name: 'COLD BOOT', text: 'THE FIRST ROLL SCORES HALF.' },
+  noise: { name: 'NOISE',     text: 'ONE FEWER ROLL.' },
+  tax:   { name: 'TAX',       text: 'BREACH REWARD -$2.' },
+};
+const ICE_IDS = Object.keys(ICE);
+const stakeOf = run => run.stake || 1;
+const wildSlots = run => (run.rig === 'botnet' ? 6 : run.rig === 'burner' ? 4 : WILD_SLOTS);
+const exploitSlots = run => (run.rig === 'root' ? 3 : EXPLOIT_SLOTS);
+function targetFor(run, r) {
+  const t = RULES.target(r) * (stakeOf(run) >= 3 ? 1.25 : 1);
+  return Math.round(t / 10) * 10;
+}
+
+// ---- profile: best stake beaten per rig (drives unlocks) ----
+const PROFILE_KEY = 'doker.profile';
+function loadProfile() {
+  try { const p = JSON.parse(localStorage.getItem(PROFILE_KEY)); if (p && p.best) return p; } catch (e) { /* none yet */ }
+  return { best: {} };
+}
+function saveProfile(p) { try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch (e) { /* storage blocked */ } }
+function rigUnlocked(p, rig) {
+  const r = RIG[rig];
+  if (!r.needs) return true;
+  if (r.needs === 'stake4') return Object.values(p.best).some(b => b >= 4);
+  return (p.best[r.needs] || 0) >= 1;
+}
+const stakeUnlocked = (p, rig, st) => st === 1 || (p.best[rig] || 0) >= st - 1;
+function unlockHint(rig) {
+  const r = RIG[rig];
+  return r.needs === 'stake4' ? 'WIN ANY RIG ON ZERO DAY' : 'WIN A RUN WITH ' + RIG[r.needs].name;
+}
+/** Record a win; returns what it unlocked (names). */
+function recordWin(rig, stake) {
+  const p = loadProfile(), before = RIGS.filter(r => rigUnlocked(p, r.id)).map(r => r.id);
+  const hadStake = p.best[rig] || 0;
+  p.best[rig] = Math.max(hadStake, stake);
+  saveProfile(p);
+  const out = RIGS.filter(r => rigUnlocked(p, r.id) && !before.includes(r.id)).map(r => 'RIG: ' + r.name);
+  if (stake >= hadStake && stake < STAKES.length) out.push('STAKE: ' + STAKES[stake].name + ' FOR ' + RIG[rig].name);
+  return out;
+}
+
+// ============================================================
 //  BOSS FIREWALLS — rounds 4 and 8 bend one rule; shown one round early
 // ============================================================
 const BOSSES = {
@@ -462,10 +532,10 @@ const BOSSES = {
 };
 const BOSS_ROUNDS = [4, 8];
 const BOSS_BOUNTY = 2;
-function rollBosses() {
+function rollBosses(stake = 1) {
   const ids = Object.keys(BOSSES).sort(() => Math.random() - 0.5);
   const out = {};
-  BOSS_ROUNDS.forEach((r, i) => (out[r] = ids[i]));
+  (stake >= 2 ? [4, 6, 8] : BOSS_ROUNDS).forEach((r, i) => (out[r] = ids[i]));
   return out;
 }
 const bossOf = (run, r = run.round) => (run.bosses || {})[r] || null;
@@ -484,7 +554,9 @@ function handStats(run, key) {
 }
 
 function rollsPerRound(run) {
-  let n = RULES.ROLLS;
+  let n = run.rig === 'phantom' ? 8 : stakeOf(run) >= 8 ? 9 : RULES.ROLLS;
+  if (run.rig === 'burner') n += 1;
+  if (run.ice === 'noise') n -= 1;
   for (const p of activePerks(run)) {
     if (p.id === 'socket') n += p.stats.amt;
     if (p.stats.catchRoll) n -= 1;

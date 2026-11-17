@@ -36,6 +36,10 @@ const money = () => run.money;
 function cost(it) {
   let p = itemPrice(it);
   if (it.kind === 'patch') p -= (run.perks || []).filter(q => q.id === 'patchtuesday').reduce((a, q) => a + q.stats.amt, 0);
+  if (run.rig === 'whale') p += 1;                                  // WHALE: everything costs $1 more
+  if (run.rig === 'goldbug' && it.kind === 'diemod') p += 2;        // GOLDBUG: die mods cost $2 more
+  if (run.rig === 'botnet' && it.kind === 'perk') p += 1;           // BOTNET: perks cost $1 more
+  if (stakeOf(run) >= 6) p += 1;                                     // HONEYNET: shop prices +$1
   return Math.max(1, p);
 }
 
@@ -50,7 +54,7 @@ function enter(r, cb, saveCb, snap) {
   } else {
     items = rollItems(2, ['perk', 'patch', 'wild', 'exploit', 'diemod']);
     packs = [rollPackType(), rollPackType()].map(type => ({ type, sold: false }));
-    rerollCost = 2;
+    rerollCost = stakeOf(run) >= 6 ? 3 : 2;                          // HONEYNET: rerolls start at $3
   }
   say(G.pick(GREET));
   save();
@@ -71,8 +75,8 @@ function say(s) { quote = s; quoteT = 0; typed = 0; SFX.talk(); }
 // ------------------------------------------------------------
 function broke(i) { say(G.pick(BROKE)); SFX.deny(); shakeSlot = i; shakeT = 0.3; }
 
-const slotsFull = it => it.kind === 'wild' && (run.wilds || []).length >= WILD_SLOTS;
-const hacksFull = it => it.kind === 'exploit' && (run.exploits || []).length >= EXPLOIT_SLOTS;
+const slotsFull = it => it.kind === 'wild' && (run.wilds || []).length >= wildSlots(run);
+const hacksFull = it => it.kind === 'exploit' && (run.exploits || []).length >= exploitSlots(run);
 function denyHack(i) { say('YOUR HANDS ARE FULL. USE AN EXPLOIT FIRST.'); SFX.deny(); shakeSlot = i; shakeT = 0.3; }
 function askSwap(it, done) { swap = { item: it, done }; say('NO ROOM. SELL ONE?'); SFX.deny(); }
 function swapSell(k) {
@@ -434,7 +438,7 @@ function drawInfo() {
     return;
   }
   const perks = run.perks.length;
-  UI.infoBox(IX, IY, IW, IH, 'THE DEALER', PAL.green, perks + ' PERK' + (perks === 1 ? '' : 'S') + ' // ' + (run.wilds || []).length + '/' + WILD_SLOTS + ' WILD', '#8a7fc0',
+  UI.infoBox(IX, IY, IW, IH, 'THE DEALER', PAL.green, perks + ' PERK' + (perks === 1 ? '' : 'S') + ' // ' + (run.wilds || []).length + '/' + wildSlots(run) + ' WILD', '#8a7fc0',
     'HOVER TO INSPECT. CLICK TO BUY.', '#a99be0');
 }
 
