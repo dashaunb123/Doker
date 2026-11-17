@@ -2,7 +2,8 @@
 (function () {
   const q = new URLSearchParams(location.search);
   const N = +q.get('n') || 10, rig = q.get('rig') || 'stock';
-  const SMART = q.get('bot') === 'smart';   // 'smart' = sensible shopper, default = random shopper
+  const SMART = q.get('bot') === 'smart';
+  const FORCE = q.get('forceBoss'), STOP = +q.get('stopAfter') || 0;   // e.g. forceBoss=honeypot&stopAfter=4   // 'smart' = sensible shopper, default = random shopper
   const stakes = (q.get('stakes') || '1,2,3,4,5,6,7,8').split(',').map(Number);
   if (q.get('zd')) ZERO_DAY_RULE = q.get('zd');
   for (const [k, v] of q) if (k in KNOBS) KNOBS[k] = isNaN(+v) ? v : +v;   // ?traceEvery=2&greyHat=house3 ...
@@ -15,13 +16,13 @@
     let wins = 0, frames = 0, owned = 0, spent = 0;
     const faced = {}, killed = {};   // per boss (THE HOUSE keyed by its two rules)
     for (let k = 0; k < N; k++) {
-      PLAY.quickStart(rig, st); PLAY.enter(); PLAY.auto = true;
+      PLAY.quickStart(rig, st); PLAY.enter(); if (FORCE) PLAY.run.bosses[4] = FORCE; PLAY.auto = true;
       let f = 0, shopT = 0;
       while (f++ < CAP) {
         PLAY.update(DT);
         const m = PLAY.mode;
         if (m === 'shop' && (shopT += DT) > 0.25) { shopT = 0; SMART ? SHOP.smartStep() : SHOP.botStep(); }
-        if (m === 'failed' || m === 'won') break;
+        if (m === 'failed' || m === 'won' || (STOP && PLAY.run.round > STOP)) break;
       }
       frames += f;
       const r = PLAY.run; owned += r.perks.length + r.wilds.length + r.dieMods.filter(Boolean).length + Object.values(r.levels).reduce((a, b) => a + Math.max(0, b - 1), 0);

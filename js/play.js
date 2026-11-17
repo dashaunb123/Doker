@@ -383,7 +383,7 @@ function startScoring() {
   });
   t += 0.2;
   at(t, () => {
-    cur.total = Math.round(cur.chips * cur.mult) * (honeypot ? -1 : 1);
+    cur.total = Math.round(Math.round(cur.chips * cur.mult) * (honeypot ? KNOBS.honeyMult : 1));
     if (denied) { cur.total = Math.round(cur.total * KNOBS.twofaRepeat); floats.push({ x: CX, y: 104, txt: '2FA: ' + HANDS[sc.key].name + ' AGAIN, HALF', col: PAL.red, life: 1.4 }); BOSS.deny(); }
     if (sc.key === 'bust' && run.lastTotal > 0) for (const w of wildsOf(run, 'ghost')) {
       cur.total = Math.max(cur.total, Math.floor(run.lastTotal / 2));
@@ -395,7 +395,7 @@ function startScoring() {
       floats.push({ x: CX, y: 104, txt: 'COLD BOOT: HALF', col: PAL.cyan, life: 1.2 });
     }
     cur.showTotal = true; cur.tp = 1;
-    if (honeypot) { floats.push({ x: CX, y: 104, txt: 'HONEYPOT!', col: PAL.red, life: 1.4, big: true }); SFX.deny(); G.glitch(0.4); BOSS.bite(); }
+    if (honeypot) { floats.push({ x: CX, y: 104, txt: 'HONEYPOT! PAIR EATEN', col: PAL.red, life: 1.4, big: true }); SFX.deny(); G.glitch(0.4); BOSS.bite(); }
     const power = cur.total / run.target;
     SFX.multHit(power);
     G.shake(Math.min(5, 1 + power * 5));

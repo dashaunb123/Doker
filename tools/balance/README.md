@@ -30,6 +30,9 @@ and ignores pure-economy items. ~0.3 s per run, so use n=500-1000.
 
 Most stake 1-2 losses are at THE HOUSE (firewall 8). HONEYPOT is the outlier boss for good players (13% kill at
 stakes 1-2 where the next worst is 5%) because pairs are ~46% of rolls.
+Fixed: HONEYPOT pairs now score 0 instead of negative (`KNOBS.honeyMult`). Forced at firewall 4 with the smart bot
+(`&forceBoss=honeypot&stopAfter=4`): kill rate 14% -> 7% at stake 1 and 40% -> 20% at stake 5 (LAG: 3% / 20%,
+ENCRYPTION: 4% / 25%). Half-negative only got it to 12% / 32%.
 
 ## Results (stock rig, 5000 runs/stake, Nov 2026, after boss wave 2 + tuning)
 

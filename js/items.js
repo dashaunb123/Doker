@@ -577,7 +577,7 @@ const BOSSES = {
   lag:        { name: 'LAG',        short: 'ONLY 7 ROLLS', text: 'ONLY 7 ROLLS.' },
   sandbox:    { name: 'SANDBOX',    short: 'PERKS OFFLINE', text: 'YOUR PERKS ARE OFFLINE.' },
   ddos:       { name: 'DDOS',       short: 'ONE DIE STUCK ON 1', text: 'ONE DIE IS STUCK ON 1.' },
-  honeypot:   { name: 'HONEYPOT',   short: 'PAIRS SCORE NEGATIVE', text: 'PAIRS SCORE NEGATIVE.' },
+  honeypot:   { name: 'HONEYPOT',   short: 'PAIRS SCORE NOTHING', text: 'PAIRS GET EATEN: THEY SCORE NOTHING.' },
   phisher:    { name: 'PHISHER',    short: 'SOME DICE ARE FAKE BAIT', text: 'HALF YOUR ROLLS, ONE DIE IS FAKE BAIT AND COUNTS FOR NOTHING.' },
   twofa:      { name: '2FA',        short: 'REPEAT HANDS SCORE HALF', text: 'A HAND YOU ALREADY SCORED THIS FIREWALL ONLY SCORES HALF.' },
   kernelpanic:{ name: 'KERNEL PANIC', short: 'HAND DIE REROLLS', text: 'AFTER YOUR DICE LAND, A DIE IN YOUR HAND REROLLS.' },
@@ -604,6 +604,7 @@ const KNOBS = {
   traceOn: 'roll', traceEvery: 1, tracePct: 0.02,   // TRACE stake: every Nth bust | roll | weak (pair/bust) raises the target by pct
   phishChance: 0.5,                // PHISHER: chance a roll carries bait
   twofaRepeat: 0.5,                // 2FA: a repeated hand scores this fraction
+  honeyMult: 0,                    // HONEYPOT: a pair's score is multiplied by this (was -1: far too deadly)
   kpHand: 1,                       // KERNEL PANIC: 1 = smacks a die that's part of your hand
   greyHat: 'house3',               // GREY HAT: boss6 | boss6x (boss targets +25%) | boss6nb (no bounty) | house3 (THE HOUSE plays 3 rules)
 };
