@@ -177,6 +177,108 @@ const MUSIC = {
       ],
     },
 
+    // PHISHER / THE ANGLER — slinky, sneaky lounge bait (D dorian, 96 bpm, swung feel)
+    boss_phisher: {
+      bpm: 96,
+      chords: [[50, 53, 57, 60], [55, 59, 62, 65], [50, 53, 57, 60], [52, 55, 59, 62]],
+      kick: [0, 7, 10], snare: [4, 12], snareVol: 0.1,
+      hat: [0.02, 0, 0.01, 0.015, 0.02, 0, 0.01, 0.015, 0.02, 0, 0.01, 0.015, 0.02, 0, 0.01, 0.02],
+      perc: [3, 11], percHz: 6000, percVol: 0.04,
+      bass: [0, _, 7, _, 10, _, 12, _, 0, _, 7, _, 5, _, 3, _], bassType: 'triangle', bassVol: 0.24, bassLen: 1.2,
+      arp: [0, _, 2, _, 3, _, 2, _], arpOct: 1, arpType: 'triangle', arpVol: 0.025,
+      leadAlways: true, leadType: 'square', leadVol: 0.035, leadLen: 1.6, leadBend: 1,
+      lead: [
+        [74, _, _, 77, _, 76, 74, _, 72, _, _, _, 69, _, _, _],
+        [74, _, _, 77, _, 79, 81, _, 79, _, 77, _, 74, _, _, _],
+        [77, _, 76, _, 74, _, 72, _, 74, _, _, 69, _, _, _, _],
+        [71, _, _, 74, _, 76, _, 77, 76, _, 74, _, 71, _, _, _],
+      ],
+    },
+    // 2FA / THE GATEKEEPER — rigid, mechanical, a beeping code-check (A minor, 120 bpm)
+    boss_twofa: {
+      bpm: 120,
+      chords: [[57, 60, 64, 69], [57, 60, 64, 69], [53, 57, 60, 65], [55, 59, 62, 67]],
+      kick: [0, 4, 8, 12], snare: [4, 12], snareVol: 0.12,
+      hat: [0.025, 0, 0.025, 0, 0.025, 0, 0.025, 0, 0.025, 0, 0.025, 0, 0.025, 0, 0.025, 0],
+      perc: [2, 6, 10, 14], percHz: 2200, percVol: 0.07,
+      bass: [0, _, 0, _, 0, _, 0, _, 0, _, 0, _, 12, _, 0, _], bassType: 'square', bassVol: 0.08, bassLen: 0.8,
+      arp: [3, _, 3, _, 2, _, 2, _], arpOct: 2, arpVol: 0.025,
+      leadAlways: true, leadType: 'square', leadVol: 0.04, leadLen: 0.8,
+      lead: [
+        [81, 81, _, _, 81, 81, _, _, 84, _, 81, _, _, _, _, _],
+        [81, 81, _, _, 81, 81, _, _, 79, _, 76, _, _, _, _, _],
+        [77, 77, _, _, 77, 77, _, _, 81, _, 77, _, _, _, _, _],
+        [79, 79, _, _, 79, 79, _, _, 83, _, 86, _, 83, _, _, _],
+      ],
+    },
+    // KERNEL PANIC / SEGFAULT — frantic, stuttering, tempo-crashing (F# minor, 164 bpm)
+    boss_kernelpanic: {
+      bpm: 164,
+      chords: [[54, 57, 61, 66], [55, 58, 62, 67], [54, 57, 61, 66], [49, 52, 56, 61]],
+      kick: [0, 3, 6, 8, 11, 14], snare: [4, 12, 13], snareVol: 0.16,
+      hat: [0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03],
+      perc: [5, 9, 15], percHz: 900, percVol: 0.12,
+      bass: [0, 0, 0, 12, 0, 0, 1, 0, 0, 0, 0, 12, 0, 1, 0, 13], bassType: 'sawtooth', bassVol: 0.1, bassLen: 0.7,
+      arp: [0, 3, 1, 2, 0, 3, 2, 1], arpOct: 2, arpVol: 0.025,
+      leadAlways: true, leadType: 'sawtooth', leadVol: 0.03, leadLen: 0.7,
+      lead: [
+        [78, 78, 78, _, 81, _, 78, 78, 85, _, 78, _, 90, 89, 88, 87],
+        [79, 79, 79, _, 82, _, 79, 79, 86, _, 79, _, 91, 90, 89, 88],
+        [78, _, 81, _, 85, _, 90, _, 85, _, 81, _, 78, 78, 78, 78],
+        [73, 73, _, 76, _, 80, _, 85, 84, 83, 82, 81, 80, 79, 78, 77],
+      ],
+    },
+    // TROJAN / THE GIFT — a jaunty music-box present that turns menacing (C major -> minor, 104 bpm)
+    boss_trojan: {
+      bpm: 104,
+      chords: [[48, 52, 55, 60], [53, 57, 60, 65], [48, 51, 55, 60], [55, 58, 62, 67]],
+      kick: [0, 8, 11], snare: [4, 12], snareVol: 0.11,
+      hat: [0.02, 0, 0.015, 0, 0.02, 0, 0.015, 0, 0.02, 0, 0.015, 0, 0.02, 0, 0.015, 0.015],
+      perc: [6, 14], percHz: 1500, percVol: 0.08,
+      bass: [0, _, 7, _, 0, _, 7, _, 0, _, 7, _, 0, _, 6, _], bassType: 'triangle', bassVol: 0.22, bassLen: 1,
+      arp: [0, 1, 2, 3, 2, 1], arpOct: 2, arpType: 'triangle', arpVol: 0.025,
+      leadAlways: true, leadType: 'triangle', leadVol: 0.07, leadLen: 1.4,
+      lead: [
+        [84, _, 79, _, 76, _, 79, _, 84, _, 86, _, 88, _, _, _],
+        [89, _, 84, _, 81, _, 84, _, 89, _, 88, _, 86, _, _, _],
+        [84, _, 79, _, 75, _, 79, _, 84, _, 82, _, 80, _, _, _],
+        [79, _, 74, _, 70, _, 74, _, 79, _, 78, _, 74, _, _, _],
+      ],
+    },
+    // BLACKOUT / LIGHTS OUT — near-silent, a heartbeat in the dark (E minor, 64 bpm)
+    boss_blackout: {
+      bpm: 64,
+      chords: [[40, 43, 47, 52], [41, 45, 48, 53], [40, 43, 47, 52], [39, 43, 46, 51]],
+      kick: [0, 2], snare: [], snareVol: 0.05,
+      hat: [0, 0, 0, 0, 0, 0, 0, 0.01, 0, 0, 0, 0, 0, 0, 0, 0.01],
+      bass: [0, _, _, _, _, _, _, _, 0, _, _, _, _, _, _, _], bassType: 'sine', bassVol: 0.3, bassLen: 6,
+      arp: [_, _, _, _, 3, _, _, _, _, _, _, _, 2, _, _, _], arpOct: 2, arpType: 'triangle', arpVol: 0.03,
+      leadType: 'sine', leadVol: 0.06, leadLen: 4, leadBend: 1,
+      lead: [
+        [_, _, _, _, 76, _, _, _, _, _, _, _, 75, _, _, _],
+        [_, _, _, _, 77, _, _, _, _, _, _, _, 76, _, _, _],
+        [_, _, _, _, 79, _, _, _, 78, _, _, _, 76, _, _, _],
+        [_, _, _, _, 75, _, _, _, _, _, _, _, 71, _, _, _],
+      ],
+    },
+    // THE HOUSE — the finale: the table theme's chords turned grand and sinister (E minor, 136 bpm)
+    boss_house: {
+      bpm: 136,
+      chords: [[52, 55, 59, 64], [48, 52, 55, 60], [55, 59, 62, 67], [54, 58, 61, 66]],
+      kick: [0, 3, 4, 8, 11, 12], snare: [4, 12], kickVol: 0.5, snareVol: 0.18,
+      hat: [0.03, 0.015, 0.03, 0.015, 0.03, 0.015, 0.03, 0.015, 0.03, 0.015, 0.03, 0.015, 0.03, 0.015, 0.03, 0.03],
+      perc: [7, 15], percHz: 3000, percVol: 0.08,
+      bass: [0, 0, 12, 0, 0, 0, 12, 0, 0, 0, 12, 0, 7, 0, 12, 0], bassType: 'sawtooth', bassVol: 0.11, bassLen: 0.9,
+      arp: [0, 1, 2, 3, 2, 1, 0, 3], arpOct: 1, arpVol: 0.025,
+      leadAlways: true, leadType: 'square', leadVol: 0.045, leadLen: 1.8,
+      lead: [
+        [76, _, _, 79, _, _, 83, _, 88, _, 86, _, 83, _, 79, _],
+        [72, _, _, 76, _, _, 79, _, 84, _, 83, _, 79, _, 76, _],
+        [79, _, _, 83, _, _, 86, _, 91, _, 89, _, 86, _, 83, _],
+        [78, _, 82, _, 85, _, 90, _, 89, _, 85, _, 82, _, 78, _],
+      ],
+    },
+
     // DOKER!! — five of a kind takes over the room: euphoric, fast, everything at once (G major, 168 bpm)
     doker: {
       bpm: 168,

@@ -81,6 +81,13 @@ const bossHooks = {
   rollsBox: { x: SBX, y: 158 },
   get perkBox() { return { x: PSX, y: PSY, w: TW, h: run.perks.length > BADGES_PER_ROW ? BADGE_H * 2 + 3 : BADGE_H }; },
   encrypted: i => dice[i].face === 6 || (dice[i].face === 1 && wildsOf(run, 'ducky').length > 0),
+  itemPos(it) {
+    const k = run.wilds.indexOf(it);
+    if (k >= 0) return { x: wildX(k) + WW / 2, y: WY };
+    const pk = run.perks.indexOf(it);
+    if (pk >= 0) { const b = badgeXY(pk); return { x: b.x + BADGE_W / 2, y: b.y - 6 }; }
+    return null;
+  },
 };
 
 function removeWild(w) {
@@ -161,6 +168,7 @@ function continueRun() {
   run.ember = run.ember || [0, 0, 0, 0, 0];
   dice.forEach((dd, i) => (dd.theme = dieTheme(i)));
   if (!run.bosses) { run.bosses = rollBosses(); run.boss = bossOf(run); }
+  if (!run.houseRules) run.houseRules = rollHouseRules(run.bosses);
   // keep new item ids unique past the restored ones
   for (const p of run.perks) if (p.uid > _uid) _uid = p.uid;
   if (d.shop) for (const it of [...(d.shop.items || []), ...((d.shop.pack && d.shop.pack.items) || [])]) if (it && it.uid > _uid) _uid = it.uid;
@@ -184,6 +192,7 @@ function newRun(rig = 'stock', stake = 1) {
     levels: {}, bonus: {}, perks: [], wilds: [], hot: 0, pity: 0, prevKey: null, hotShieldUsed: false, phantom: 0, seenKeys: [], exploits: [], dieMods: [null, null, null, null, null], dieStickers: [null, null, null, null, null], ember: [0, 0, 0, 0, 0], injectChips: 0,
     bosses: rollBosses(stake), boss: null, ddosDie: -1,
   };
+  run.houseRules = rollHouseRules(run.bosses);
   // rig loadouts
   if (rig === 'goldbug') run.dieMods = ['gold', 'gold', 'gold', 'gold', 'gold'];
   if (rig === 'glasscannon') run.dieMods = ['glass', 'glass', 'glass', 'glass', 'glass'];
@@ -212,7 +221,7 @@ function startRound(r) {
     floats.push({ x: CX, y: 110, txt: 'ANTIVIRUS QUARANTINED ' + BOSSES[run.boss].name, col: PAL.green, life: 3, big: true });
     run.boss = null;
   }
-  run.ddosDie = run.boss === 'ddos' ? G.randi(0, N - 1) : -1;
+  run.ddosDie = ruleOn(run, 'ddos') ? G.randi(0, N - 1) : -1;
   onRoundStart(run);
   run.rollsLeft = rollsPerRound(run);
   run.rollsRound = 0;
@@ -250,6 +259,8 @@ function launchDice() {
   const w = dieWeights(run);
   run.phantom = wildsOf(run, 'phantom').length || run.rig === 'phantom' ? rollFace(w) : 0;
   run.quantumDie = wildsOf(run, 'quantum').length ? G.randi(0, N - 1) : -1;
+  run.phishDie = ruleOn(run, 'phisher') ? G.randi(0, N - 1) : -1;
+  run.blackoutHidden = ruleOn(run, 'blackout');
   dice.forEach(d => (d.dropped = false));
   const finals = forceFaces ? forceFaces.slice() : dice.map((_, i) => rollFace(dieWeightsFor(run, i, w)));
   forceFaces = null;
@@ -285,7 +296,12 @@ function startScoring() {
   // rule-benders announce themselves on the dice
   sc.notes.forEach(n => at(0.05, () => floats.push({ x: dieX(n.i), y: SY - 16, txt: n.txt, col: PAL.magenta, life: 1.2 })));
   if (sc.dropped >= 0) at(0.05, () => { floats.push({ x: dieX(sc.dropped), y: SY - 16, txt: 'DROPPED', col: '#8a7fc0', life: 1.2 }); wildsOf(run, 'packetloss').forEach(popPerk); });
-  const honeypot = run.boss === 'honeypot' && sc.key === 'pair';
+  const honeypot = ruleOn(run, 'honeypot') && sc.key === 'pair';
+  // 2FA: a hand you've already scored this firewall is denied
+  const denied = ruleOn(run, 'twofa') && sc.key !== 'bust' && (run.seenKeys || []).includes(sc.key);
+  // BLACKOUT: the dice light up as they score; PHISHER yanks the bait
+  if (run.blackoutHidden) { run.blackoutHidden = false; dice.forEach(d => { d.flash = 1; d.pop = 1; }); SFX.glitch(); }
+  if (ruleOn(run, 'phisher') && run.phishDie >= 0) BOSS.phishReveal(run.phishDie);
   BOSS.onScore(sc.key);
   if (sc.phantomUsed) at(0.05, () => wildsOf(run, 'phantom').forEach(w => { popPerk(w); wildFloat(w, 'GHOST ' + run.phantom, PAL.cyan); }));
 
@@ -363,6 +379,7 @@ function startScoring() {
   t += 0.2;
   at(t, () => {
     cur.total = Math.round(cur.chips * cur.mult) * (honeypot ? -1 : 1);
+    if (denied) { cur.total = 0; floats.push({ x: CX, y: 104, txt: '2FA: ' + HANDS[sc.key].name + ' ALREADY USED', col: PAL.red, life: 1.4 }); BOSS.deny(); }
     if (sc.key === 'bust' && run.lastTotal > 0) for (const w of wildsOf(run, 'ghost')) {
       cur.total = Math.max(cur.total, Math.floor(run.lastTotal / 2));
       popPerk(w); wildFloat(w, 'GHOST', '#b6ffcc');
@@ -1022,6 +1039,7 @@ function drawPerkStrip() {
     rrect(b.x, y, BADGE_W, BADGE_H, pop > 0.3 ? PAL.white : col);
     rect(b.x + 1, y + 1, BADGE_W - 2, BADGE_H - 2, pop > 0.3 ? col : '#15112c');
     text(PERK_DEFS[p.id].code, b.x + BADGE_W / 2, y + 2, pop > 0.3 ? PAL.ink : PAL.white, { align: 'center' });
+    if (ruleOn(run, 'trojan') && p.uid === run.trojanUid) { G.ctx.globalAlpha = 0.6; rect(b.x, y, BADGE_W, BADGE_H, PAL.red); G.ctx.globalAlpha = 1; }
   });
   if (run.perks.length > max) text('+' + (run.perks.length - max), TX + TW, PSY + 16, '#8a7fc0', { align: 'right' });
 }
@@ -1068,6 +1086,10 @@ function drawWildRow() {
     else if (w.id === 'phantom' && run.phantom && mode !== 'ready' && mode !== 'intro') tag = String(run.phantom);
     if (tag) text(tag, x + WW - 2, y + WH - 8, PAL.white, { align: 'right', outline: PAL.ink });
     if (w.edition) UI.editionFx(w.edition, x, y, WW, WH);
+    if (ruleOn(run, 'trojan') && w.uid === run.trojanUid) {
+      ctx.globalAlpha = 0.45 + Math.sin(T * 10) * 0.15; rect(x, y, WW, WH, PAL.red); ctx.globalAlpha = 1;
+      text('INFECTED', x + WW / 2, y + WH - 8, PAL.white, { align: 'center', outline: PAL.ink });
+    }
     if (selWild === i) drawBrackets(x, y, WW, WH, PAL.green, 2 + Math.round(Math.abs(Math.sin(T * 8))));
   }
 }
@@ -1258,7 +1280,8 @@ function drawDie(i, off) {
     else if (hover >= 0) bob = Math.round(Math.abs(Math.sin(T * 9 + i * 0.9)) * 1.5);
   }
   bob += Math.round(d.pop * 6);
-  const img = DIE[d.theme][d.face];
+  const hiddenDie = run && run.blackoutHidden && d.phase !== 'wait';
+  const img = hiddenDie ? tinted(DIE.bone[1], '#241a4a') : DIE[d.theme][d.face];
   const ps = 1 + d.pop * 0.2;
   const sx = (d.phase === 'air' ? d.sq : d.sx) * ps, sy = (d.phase === 'air' ? 1 : d.sy) * ps;
   if (d.scoring && result && d.phase === 'idle') {
@@ -1266,6 +1289,7 @@ function drawDie(i, off) {
     for (const [ox, oy] of [[-2, 0], [2, 0], [0, -2], [0, 2]]) drawSq(glow, cx + ox, base - bob + oy, 2, sx, sy, 0.8);
   }
   drawSq(img, cx, base - d.h - bob, 2, sx, sy, d.dropped && d.phase === 'idle' ? 0.3 : 1);
+  if (hiddenDie) G.text('?', cx, base - d.h - bob - 20, '#8a7fc0', { align: 'center', scale: 2 });
   const st = dieSticker(run, i);
   if (st && d.phase !== 'air') {
     const tx = Math.round(cx + 9 * sx), ty = Math.round(base - d.h - bob - 31 * sy);
@@ -1377,10 +1401,10 @@ function drawHUD() {
   const HX = (52 + W - 60) / 2;
   if (mode !== 'shop' && run.boss) {
     const b = BOSSES[run.boss];
-    text((Math.floor(G.T * 3) % 2 ? '! ' : '  ') + 'BOSS ' + b.name + ': ' + b.short, HX, 4, PAL.red, { align: 'center' });
+    text((Math.floor(G.T * 3) % 2 ? '! ' : '  ') + 'BOSS ' + b.name + ': ' + bossShort(run, run.boss), HX, 4, PAL.red, { align: 'center' });
   } else {
     const nb = bossOf(run, run.round + 1);
-    if (nb) text('BOSS NEXT: ' + BOSSES[nb].name + ' // ' + BOSSES[nb].short, HX, 4, PAL.orange, { align: 'center' });
+    if (nb) text('BOSS NEXT: ' + BOSSES[nb].name + ' // ' + bossShort(run, nb), HX, 4, PAL.orange, { align: 'center' });
     else if (mode !== 'shop' && run.ice) text('ICE ' + ICE[run.ice].name + ': ' + ICE[run.ice].text, HX, 4, PAL.cyan, { align: 'center' });
   }
   const st = STAKES[stakeOf(run) - 1];
