@@ -284,7 +284,8 @@ function actPlay() {
 function actOptions() {
   SFX.select();
   termPush('> NANO DOKER.CFG');
-  termPush('> [OPTIONS COMING SOON]');
+  OPTIONS.enter(() => goTo('menu'));
+  goTo('options');
 }
 function actCollection() {
   SFX.select();
@@ -711,6 +712,7 @@ function updateTrans(dt) {
     trans.swapped = true;
     state = trans.to;
     if (state === 'play') { PLAY.enter(); MUSIC.play(PLAY.track()); }
+    else if (state === 'options') MUSIC.play('menu');
     else { menuT = 0; refreshButtons(); logo.landed = [0, 0, 0, 0, 0]; MUSIC.play('menu'); }
     glitchT = 0.2;
   }
@@ -813,7 +815,12 @@ function update(dt) {
     else if (params.has('skipboot')) startMenu();
     return;
   }
-  if (state === 'play') { PLAY.update(dt); return; }
+  if (state === 'play') {
+    const n = Math.ceil(SET.speed);           // OPTIONS game speed, in small steps
+    for (let i = 0; i < n; i++) PLAY.update(dt * SET.speed / n);
+    return;
+  }
+  if (state === 'options') { OPTIONS.update(dt); return; }
 
   menuT += dt;
   for (let i = 0; i < btnHoverT.length; i++) btnHoverT[i] += dt;
@@ -857,17 +864,19 @@ function renderMenu() {
 function render() {
   rect(0, 0, W, H, '#07061a');
   ctx.save();
-  if (shake > 0) ctx.translate(Math.round(rand(-shake, shake)), Math.round(rand(-shake, shake)));
+  const sk = shake * shakeScale();
+  if (sk > 0) ctx.translate(Math.round(rand(-sk, sk)), Math.round(rand(-sk, sk)));
   if (state === 'boot') renderBoot();
   else if (state === 'play') PLAY.render();
+  else if (state === 'options') { drawBackground(); drawRain(0.22); OPTIONS.render(); drawTicker(); }
   else renderMenu();
   ctx.restore();
-  if (glitchT > 0) postGlitch();
+  if (glitchT > 0 && SET.flashes) postGlitch();
   if (flash > 0) { ctx.globalAlpha = flash; rect(0, 0, W, H, '#ffffff'); ctx.globalAlpha = 1; }
   if (trans) drawWipe();
   if (params.has('ff')) { rect(0, 0, W, 9, '#000000'); text(document.title.slice(0, 63), 1, 1, document.title.startsWith('FF OK') ? PAL.green : PAL.red); }
   if (mouse.inside) {
-    const hot = state === 'play' ? PLAY.hot()
+    const hot = state === 'options' ? OPTIONS.hot() : state === 'play' ? PLAY.hot()
       : state === 'menu' && (hoverBtn >= 0 || hoverMascot || hoverCard >= 0 || hoverDeco >= 0 || hoverLogoDie);
     blit(hot ? CURSOR_HOT : CURSOR, mouse.x, mouse.y);
   }
@@ -879,9 +888,10 @@ window.G = {
   rand, randi, pick, clamp, easeOutBack, easeOutCubic,
   rect, rrect, blit, blitC, text,
   drawBackground, drawRain, drawTicker, goTo,
-  shake: n => { shake = Math.max(shake, n); },
-  glitch: t => { glitchT = Math.max(glitchT, t); },
-  flash: a => { flash = Math.max(flash, a); },
+  shake: n => { shake = Math.max(shake, n); },   // scaled by OPTIONS when drawn
+  glitch: t => { if (SET.flashes) glitchT = Math.max(glitchT, t); },
+  flash: a => { flash = Math.max(flash, a * flashScale()); },
+  toggleFullscreen,
   get T() { return T; },
 };
 
@@ -896,6 +906,8 @@ if (params.has('ff')) {
     mouse.x = cx; mouse.y = cy; mouse.inside = true;
     update(1 / 60);
     if (state === 'play') PLAY.onPointer();
+    else if (state === 'options') OPTIONS.onPointer(cx, cy);
+    else if (state === 'menu') { const b = hitButton(cx, cy); if (b >= 0) activate(b); }
     for (let i = 0; i < 72; i++) update(1 / 60);
   });
   glitchT = 0; flash = 0; shake = 0;
@@ -954,6 +966,7 @@ addEventListener('pointerdown', e => {
   if (state === 'boot') { if (bootDone()) startMenu(); else bootT = 999; return; }
   if (trans || !mouse.inside) return;
   if (state === 'play') return PLAY.onPointer(mouse.x, mouse.y);
+  if (state === 'options') return OPTIONS.onPointer(mouse.x, mouse.y);
   if (menuT < 1) return;
   const { x, y } = mouse;
   const b = hitButton(x, y);
@@ -971,12 +984,14 @@ addEventListener('keydown', e => {
   startAudio();
   if (state === 'boot') { if (bootDone()) startMenu(); else bootT = 999; return; }
   const k = e.key.toLowerCase();
+  if (state === 'options' && !trans && OPTIONS.typing()) { OPTIONS.onKey(e.key); e.preventDefault(); return; }   // typing CONFIRM
   if (k === 'm') { SFX.muted = !SFX.muted; return; }
   if (k === 'n') { MUSIC.toggle(); return; }
-  if (k === 'c') { document.body.classList.toggle('nocrt'); return; }
+  if (k === 'c') { SET.crt = !SET.crt; applyCrt(); saveSettings(); return; }
   if (k === 'f') { toggleFullscreen(); return; }
   if (trans) return;
   if (state === 'play') { if (k === ' ' || k === 'enter') e.preventDefault(); return PLAY.onKey(k); }
+  if (state === 'options') { if (OPTIONS.onKey(e.key)) e.preventDefault(); return; }
   if (menuT < 1) return;
   if (k === 'arrowdown' || k === 's') { kbMode = true; sel = (sel + 1) % BUTTONS.length; btnHoverT[sel] = 0; SFX.hover(); e.preventDefault(); }
   else if (k === 'arrowup' || k === 'w') { kbMode = true; sel = (sel + BUTTONS.length - 1) % BUTTONS.length; btnHoverT[sel] = 0; SFX.hover(); e.preventDefault(); }

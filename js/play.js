@@ -233,7 +233,13 @@ function startRound(r) {
   result = null; cur = null; reward = null; seq = []; seqT = 0;
   dice.forEach((d, i) => { d.scoring = false; d.theme = dieTheme(i); });
   BOSS.setup(run, bossHooks);
-  if (run.boss) { setMode('bossintro'); BOSS.intro(() => setMode('ready')); }
+  if (run.boss) {
+    // OPTIONS > BOSS INTROS 'FIRST TIME': skip the cutscene for bosses you've met before
+    const seen = SET.seenBosses.includes(run.boss);
+    if (!seen) { SET.seenBosses.push(run.boss); saveSettings(); }
+    setMode('bossintro'); BOSS.intro(() => setMode('ready'));
+    if (seen && SET.bossIntro === 'first') BOSS.skip();
+  }
   else { setMode('intro'); if (r > 1) SFX.whoosh(); }
   MUSIC.play(track());   // after setMode: coming from the shop, mode must no longer be 'shop'
   saveRun('round');

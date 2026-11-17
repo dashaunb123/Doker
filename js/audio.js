@@ -14,6 +14,9 @@ const SFX = {
     this.out = this.ac.createGain();
     this.out.gain.value = 0.35;
     this.out.connect(this.ac.destination);
+    this.fx = this.ac.createGain();               // sound effects bus (music has its own, see MUSIC.gain)
+    this.fx.connect(this.out);
+    this.applyVolumes();
     // one shared second of white noise, sliced for every noise hit
     this._nb = this.ac.createBuffer(1, this.ac.sampleRate, this.ac.sampleRate);
     const d = this._nb.getChannelData(0);
@@ -21,6 +24,12 @@ const SFX = {
   },
 
   get ok() { return !!this.ac && !this.muted; },
+
+  /** Push the OPTIONS volumes (SET.music / SET.sfx, 0..10) onto the buses. */
+  applyVolumes() {
+    if (this.fx) this.fx.gain.value = SET.sfx / 10;
+    if (MUSIC.gain) MUSIC.gain.gain.value = MUSIC.base();
+  },
 
   tone(f, dur, o = {}) {
     if (!this.ok) return;
@@ -33,7 +42,7 @@ const SFX = {
     if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t0 + dur);
     g.gain.setValueAtTime(o.vol ?? 0.15, t0);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    osc.connect(g).connect(o.dest || this.out);
+    osc.connect(g).connect(o.dest || this.fx || this.out);
     osc.start(t0); osc.stop(t0 + dur + 0.05);
   },
 
@@ -46,7 +55,7 @@ const SFX = {
     const g = this.ac.createGain();
     g.gain.setValueAtTime(o.vol ?? 0.15, t0);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    src.connect(f).connect(g).connect(o.dest || this.out);
+    src.connect(f).connect(g).connect(o.dest || this.fx || this.out);
     src.start(t0, Math.random() * 0.5, dur + 0.05);
   },
 
@@ -388,7 +397,7 @@ const MUSIC = {
     if (!SFX.ac) return false;
     if (!this.gain) {
       this.gain = SFX.ac.createGain();
-      this.gain.gain.value = 0.6;
+      this.gain.gain.value = this.base();
       this.gain.connect(SFX.out);
     }
     return true;
@@ -404,6 +413,8 @@ const MUSIC = {
   },
 
   toggle() { this.enabled = !this.enabled; },
+  /** Music level from OPTIONS (0.6 = full). */
+  base() { return 0.6 * SET.music / 10; },
 
   /** Dip the music for a moment (so the announcer cuts through). */
   duck(sec = 1.2, to = 0.18) {
@@ -411,9 +422,9 @@ const MUSIC = {
     const g = this.gain.gain, t = SFX.ac.currentTime;
     g.cancelScheduledValues(t);
     g.setValueAtTime(g.value, t);
-    g.linearRampToValueAtTime(to, t + 0.06);
-    g.setValueAtTime(to, t + sec);
-    g.linearRampToValueAtTime(0.6, t + sec + 0.5);
+    g.linearRampToValueAtTime(to * SET.music / 10, t + 0.06);
+    g.setValueAtTime(to * SET.music / 10, t + sec);
+    g.linearRampToValueAtTime(this.base(), t + sec + 0.5);
   },
 
   tick() {
@@ -462,13 +473,13 @@ const VOICE = {
   /** Play a random take of a call: 'straight' | 'full' | 'four' | 'doker'. */
   play(key) {
     const list = this.LINES[key];
-    if (!list || SFX.muted) return;
+    if (!list || SFX.muted || !SET.announcer || !SET.sfx) return;
     let i = Math.floor(Math.random() * list.length);
     if (list.length > 1 && i === this.last[key]) i = (i + 1) % list.length;
     this.last[key] = i;
     try {
       const a = new Audio('assets/voice/' + list[i]);
-      a.volume = this.volume;
+      a.volume = this.volume * SET.sfx / 10;
       const p = a.play();
       if (p && p.catch) p.catch(() => {});
       MUSIC.duck(key === 'doker' ? 2.6 : 1.3);

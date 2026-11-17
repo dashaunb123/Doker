@@ -64,6 +64,8 @@ Plain `<script>` files (no modules, so it runs from `file://`). Load order matte
 | `js/bossart.js` | Older full-body boss sprites — only used as a fallback if a boss has no loom art |
 | `js/play.js` | The table: run flow, dice animation, scoring sequence, sidebar, perk strip, autosave (`localStorage` key `doker.save.v1`) |
 | `js/menu.js` | Boot + menu scene, main loop, input, scene transitions, shared helpers (`window.G`) |
+| `js/settings.js` | Player settings `SET` (volumes, announcer, CRT, shake, flashes, game speed, boss intros, bosses met) in `localStorage['doker.settings']`; loaded before audio.js |
+| `js/options.js` | OPTIONS scene (state `'options'` in menu.js): settings rows, CONTROLS panel, RESET PROGRESS (type CONFIRM) |
 
 Internal resolution is 384×216, scaled up in whole-pixel steps.
 
