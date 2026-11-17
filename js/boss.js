@@ -56,6 +56,54 @@ const PERSONA = {
     bust: ['TEE HEE.', 'STICKY, ISN\'T IT?'], big: ['OOH, TOO BIG TO SWALLOW.', 'HEY! SHARE!'],
     defeat: 'I\'M... CRACKING...', gloat: 'YOU WERE DELICIOUS.',
   },
+  phisher: {
+    title: 'THE ANGLER', col: '#2ce8b5',
+    intro: 'PSST. ONE OF THESE DICE IS A GIFT. GUESS WHICH.',
+    act: ['GOT ONE!', 'HOOK, LINE AND SINKER.', 'CLICKED IT, DIDN\'T YOU?'],
+    peek: ['NIBBLE, NIBBLE...', 'LOOKS LEGIT.'],
+    bust: ['YOU TOOK THE BAIT.', 'TOO EASY.'], big: ['WHO TAUGHT YOU TO CHECK LINKS?', 'GRR. SMART FISH.'],
+    defeat: 'CONNECTION... RESET BY PEER...', gloat: 'YOUR DATA IS MINE NOW.',
+  },
+  twofa: {
+    title: 'THE GATEKEEPER', col: '#e43b44',
+    intro: 'ONE CODE. ONE USE. NO EXCEPTIONS.',
+    act: ['DENIED.', 'CODE ALREADY USED.', 'NOT ON THE LIST.'],
+    peek: ['VERIFYING...', 'CHECKING ID.'],
+    bust: ['ACCESS: NONE.', 'TRY AGAIN IN 30 SECONDS.'], big: ['...VERIFIED. FOR NOW.', 'HOW DID THAT GET THROUGH?'],
+    defeat: 'SESSION... EXPIRED...', gloat: 'ACCOUNT LOCKED.',
+  },
+  kernelpanic: {
+    title: 'SEGFAULT', col: '#4f7bff',
+    intro: 'OH NO OH NO OH NO. SOMETHING IS VERY WRONG.',
+    act: ['PANIC!', 'FATAL ERROR!', 'REBOOTING YOUR DIE!', 'SORRY SORRY SORRY!'],
+    peek: ['IS IT STABLE?', 'DON\'T TOUCH ANYTHING.'],
+    bust: ['NOT MY FAULT!', 'CORE DUMPED. HA.'], big: ['THAT SHOULDN\'T COMPILE!', 'UNHANDLED EXCEPTION!'],
+    defeat: ':( YOUR PC RAN INTO A PROBLEM...', gloat: 'HALT AND CATCH FIRE.',
+  },
+  trojan: {
+    title: 'THE GIFT', col: '#e8803a',
+    intro: 'A PRESENT FOR YOU. DON\'T LOOK INSIDE.',
+    act: ['INFECTED.', 'MINE NOW.', 'SURPRISE!'],
+    peek: ['NICE CARDS...', 'WHICH ONE NEXT?'],
+    bust: ['NEIGH-HEH-HEH.', 'SHOULD HAVE READ THE TERMS.'], big: ['YOU PATCHED IT?!', 'MY PAYLOAD!'],
+    defeat: 'QUARANTINED...', gloat: 'NEVER TRUST A GIFT.',
+  },
+  blackout: {
+    title: 'LIGHTS OUT', col: '#b48cff',
+    intro: 'LET\'S PLAY... IN THE DARK.',
+    act: ['SHHH...', 'CAN YOU SEE IT?', 'LIGHTS OUT.'],
+    peek: ['WHAT DID YOU ROLL?', 'I SEE IT. YOU DON\'T.'],
+    bust: ['IN THE DARK, EVERYONE LOSES.', 'HEH HEH.'], big: ['TOO BRIGHT!', 'MY EYES!'],
+    defeat: 'THE LIGHTS... ARE COMING BACK...', gloat: 'GOODNIGHT.',
+  },
+  house: {
+    title: 'THE DEALER, UNMASKED', col: '#4dff88',
+    intro: 'SURPRISED? THE HOUSE ALWAYS WINS.',
+    act: ['THE HOUSE TAKES ITS CUT.', 'HOUSE RULES.', 'I DEALT THIS GAME.'],
+    peek: ['NOT BAD, FOR A GUEST.', 'I KNOW EVERY ROLL.'],
+    bust: ['THE HOUSE ALWAYS WINS.', 'BETTER LUCK NEXT RUN.'], big: ['...IMPRESSIVE.', 'NO ONE BEATS THE HOUSE!'],
+    defeat: 'THE HOUSE... HAS FALLEN...', gloat: 'THANKS FOR PLAYING. COME AGAIN.',
+  },
 };
 
 // ---------- art: bust frames, hand frames, anchors, arm colours ----------
@@ -120,6 +168,7 @@ let veins = [], beams = [], motes = [], rings = [];
 let blinkT = 0, nextBlink = 2, bob = 0, presence = 0, fade = 1, lookX = 0;
 
 const pick = a => a[Math.floor(Math.random() * a.length)];
+const has = r => !!run && ruleOn(run, r);       // is this boss rule live? (THE HOUSE runs two)
 const lerp = (a, b, p) => a + (b - a) * p;
 const ease = p => (p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2);
 const bustImg = () => A.bust[body.frame] || A.bust.idle;
@@ -233,8 +282,9 @@ function beam(x1, y1, x2, y2, col, life = 0.3) { beams.push({ x1, y1, x2, y2, li
 const CUT_LEN = 3.9;
 function intro(done) {
   if (!id) return done();
-  cut = { t: 0, done, risen: false, grabbed: false, said: false };
-  if (id === 'lag') held = Math.max(0, Math.min(RULES.ROLLS, run.rollsLeft + 3) - run.rollsLeft);
+  cut = { t: 0, done, risen: false, grabbed: false, said: false, pre: id === 'house' ? 1.8 : 0, unmasked: false };
+  if (id === 'house') say('WELCOME BACK, FRIEND. ONE LAST GAME?', 1.4);
+  if (has('lag')) held = Math.max(0, Math.min(RULES.ROLLS, run.rollsLeft + 3) - run.rollsLeft);
   body.oy = 150; body.frame = 'blink'; presence = 0;
   hands.forEach(h => { h.x = h.home.x + (h.home.x < hk.TX + 50 ? -30 : 30); h.y = -40; h.frame = 'open'; });
   SFX.fail(); G.glitch(0.6);
@@ -244,9 +294,9 @@ function endCut() {
   const done = cut.done;
   cut = null; body.ox = 0; body.oy = 0; body.frame = 'idle'; presence = 1;
   hands.forEach(h => { h.x = h.home.x; h.y = h.home.y; h.frame = 'grip'; });
-  // rule set-pieces right after the intro
-  if (id === 'lag') {
-    busy = true;
+  // rule set-pieces right after the intro (chained: THE HOUSE may have two)
+  busy = true;
+  if (has('lag')) {
     const rx = hk.rollsBox.x + 50, ry = hk.rollsBox.y + 16;
     for (let k = 0; k < 3; k++) {
       reach(0, rx, ry, 0.35, 'open', 'peek', 14);                       // reach into the roll counter...
@@ -260,9 +310,8 @@ function endCut() {
     call(() => { held = 0; say('MMM... CRUNCHY.'); });
     handHome(0, 0.4);
     settle(0.3);
-    call(() => { busy = false; done(); });
-  } else if (id === 'sandbox') {
-    busy = true;
+  }
+  if (has('sandbox')) {
     const b = hk.perkBox, cx = b.x + b.w / 2;
     lean(0, -4, 0.2, 'act');
     reach(1, cx, b.y - 34, 0.4, 'fist', 'act', 16);
@@ -275,19 +324,20 @@ function endCut() {
     wait(0.4, 'act');
     handHome(1, 0.4);
     settle(0.3);
-    call(() => { busy = false; done(); });
-  } else done();
+  }
+  call(() => { busy = false; done(); });
 }
 function skip() { if (cut) endCut(); }
 /** Restore the boss's lasting effects without the cutscene (after CONTINUE). */
-function resume() { if (!id) return; presence = 1; if (id === 'sandbox') { caged = true; cageT = 1; } }
+function resume() { if (!id) return; presence = 1; if (has('sandbox')) { caged = true; cageT = 1; } }
 
 // ---------- rule enforcement hooks ----------
 /** Before the dice leave: LAG sometimes freezes them. Returns extra launch delay. */
 function beforeRoll() {
   locks.clear();
   if (!active()) return 0;
-  if (id === 'lag' && Math.random() < 0.4) {
+  if (has('trojan')) infect();
+  if (has('lag') && Math.random() < 0.4) {
     freezeT = 0.9;
     say(pick(P.act), 1.0);
     reach2([hands[0].home.x + 20, hands[0].home.y + 30], [hands[1].home.x - 20, hands[1].home.y + 30], 0.2, 'open', 'act');
@@ -298,11 +348,27 @@ function beforeRoll() {
   return 0;
 }
 
+/** TROJAN: point at one of your wildcards (or a perk if you have none) and infect it for this roll. */
+function infect() {
+  const ws = run.wilds || [], ps = run.perks || [];
+  const target = ws.length ? pick(ws) : ps.length ? pick(ps) : null;
+  run.trojanUid = target ? target.uid : 0;
+  if (!target) return;
+  const pos = hk.itemPos(target);
+  if (!pos) return;
+  const hi = nearest(pos.x);
+  reach(hi, pos.x, pos.y + 8, 0.3, 'point', 'peek', 10);
+  call(() => { SFX.glitch(); G.glitch(0.15); hk.float(pos.x, pos.y + 34, 'INFECTED', PAL.red); if (Math.random() < 0.5) say(pick(P.act), 1.0); });
+  wait(0.15, 'act');
+  handHome(hi, 0.3);
+  call(() => { body.frame = 'idle'; });
+}
+
 /** After all dice land, before scoring. DDOS pounds its die, CIPHER slaps padlocks onto 6s. */
 function afterLand(done) {
   if (!active()) return done();
   busy = true;
-  if (id === 'ddos') {
+  if (has('ddos')) {
     const i = run.ddosDie, tx = hk.dieX(i), top = hk.dieTop, hi = nearest(tx);
     if (hk.face(i) !== 1) {
       reach(hi, tx, top - 22, 0.32, 'fist', 'act', 14);               // fist hovers over the die...
@@ -325,7 +391,8 @@ function afterLand(done) {
       handHome(hi, 0.35);
     }
     settle(0.3);
-  } else if (id === 'encryption') {
+  }
+  if (has('encryption')) {
     const six = [0, 1, 2, 3, 4].filter(i => hk.encrypted(i));
     if (!six.length) {
       if (Math.random() < 0.5) { lean(0, 8, 0.25, 'peek'); call(() => say(pick(P.peek), 1.1)); wait(0.5, 'peek'); settle(0.3); }
@@ -346,13 +413,60 @@ function afterLand(done) {
       settle(0.3);
     }
   }
+  if (has('kernelpanic')) {
+    // smack one die (never the DDOS die); it reboots to a new face
+    const opts = [0, 1, 2, 3, 4].filter(i => i !== run.ddosDie);
+    const i = pick(opts), tx = hk.dieX(i), top = hk.dieTop, hi = nearest(tx);
+    reach(hi, tx, top - 20, 0.26, 'fist', 'act', 12);
+    reach(hi, tx, top + 10, 0.06, 'fist', 'act', 0);
+    call(() => {
+      let f = G.randi(1, 6); if (f === hk.face(i)) f = (f % 6) + 1;
+      hk.setFace(i, f); SFX.glitch(); G.glitch(0.3); G.shake(4);
+      rings.push({ x: tx, y: top + 20, r: 6, life: 1 });
+      hk.float(tx, top + 52, 'PANIC! ' + f, '#4f7bff', true);
+      say(pick(P.act), 1.0);
+    });
+    wait(0.2, 'act');
+    handHome(hi, 0.3);
+    settle(0.2);
+  }
+  if (has('phisher')) {
+    // dangle the lure across the whole row so you can't tell which die is the bait
+    reach(0, hk.dieX(0), hk.dieTop - 14, 0.25, 'open', 'peek', 8);
+    for (let i = 1; i < 5; i++) reach(0, hk.dieX(i), hk.dieTop - 14 - (i % 2) * 4, 0.12, 'open', 'peek', 4);
+    call(() => { if (Math.random() < 0.4) say(pick(P.peek), 1.0); });
+    handHome(0, 0.3);
+    settle(0.2);
+  }
   call(() => { busy = false; done(); });
+}
+
+/** PHISHER: scoring reveals the bait die — yank it. */
+function phishReveal(i) {
+  if (!active() || !has('phisher')) return;
+  const tx = hk.dieX(i), hi = nearest(tx);
+  reach(hi, tx, hk.dieTop + 4, 0.18, 'fist', 'act', 6);
+  reach(hi, tx, hk.dieTop - 26, 0.12, 'fist', 'act', 0);
+  call(() => { SFX.slam(2); G.shake(3); hk.float(tx, hk.dieTop - 6, 'PHISHED!', '#2ce8b5', true); say(pick(P.act), 1.1); });
+  handHome(hi, 0.3);
+  settle(0.2);
+}
+/** 2FA: a repeated hand is denied — stamp it. */
+function deny() {
+  if (!active()) return;
+  const cx = hk.TX + hk.TW / 2, hi = 1;
+  reach(hi, cx + 30, hk.resultY - 10, 0.18, 'fist', 'act', 10);
+  reach(hi, cx + 30, hk.resultY + 6, 0.06, 'fist', 'act', 0);
+  call(() => { SFX.deny(); SFX.slam(1); G.shake(4); rings.push({ x: cx + 30, y: hk.resultY + 14, r: 6, life: 1 }); say(pick(P.act), 1.1); });
+  wait(0.25, 'act');
+  handHome(hi, 0.3);
+  settle(0.2);
 }
 
 /** Scoring has started (hand known). SANDBOX rattles the cage if perks would have fired. */
 function onScore(key) {
   if (!active()) return;
-  if (id === 'sandbox' && run.perks.length) {
+  if (has('sandbox') && run.perks.length) {
     const b = hk.perkBox, cx = b.x + b.w * 0.75;
     reach(1, cx, b.y - 10, 0.18, 'grip', 'act', 8);
     for (let k = 0; k < 3; k++) { reach(1, cx + (k % 2 ? 3 : -3), b.y - 8, 0.06, 'grip', 'act', 0); call(() => { cageT = 0.6; SFX.slam(1); G.shake(1); }); }
@@ -360,12 +474,12 @@ function onScore(key) {
     handHome(1, 0.3);
     settle(0.2);
   }
-  if (id === 'honeypot' && key !== 'pair' && key !== 'bust' && Math.random() < 0.3) say(pick(P.peek), 1.1);
+  if (has('honeypot') && key !== 'pair' && key !== 'bust' && Math.random() < 0.3) say(pick(P.peek), 1.1);
 }
 
 /** HONEYPOT: it lunges and grabs at the score when a pair lands. */
 function bite() {
-  if (!active() || id !== 'honeypot') return;
+  if (!active() || !has('honeypot')) return;
   const cx = hk.TX + hk.TW / 2, cy = hk.resultY + 18;
   lean(0, 18, 0.14, 'act');
   reach2([cx - 34, cy], [cx + 34, cy], 0.16, 'open', 'act');
@@ -457,7 +571,12 @@ function update(dt) {
 
   if (cut) {
     cut.t += dt;
-    const t = cut.t;
+    if (cut.pre && cut.t < cut.pre) {               // THE HOUSE: the friendly Dealer first...
+      presence = 0; body.oy = 150;
+      if (cut.t > cut.pre - 0.5 && !cut.unmasked) { cut.unmasked = true; SFX.glitch(); SFX.fail(); G.glitch(1); G.flash(0.8); G.shake(6); }
+      return;
+    }
+    const t = cut.t - (cut.pre || 0);
     // eyes in the dark, it rises behind the table, then slams both hands onto the corners
     if (t < 0.7) { body.oy = 150; body.frame = 'blink'; presence = t / 0.7 * 0.3; }
     else if (t < 1.5) {
@@ -678,8 +797,21 @@ function drawCage() {
 function drawCut() {
   if (!cut) return;
   const { rect, text, ctx, T, W, H } = G;
-  const t = cut.t;
-  ctx.globalAlpha = Math.min(0.55, t * 1.5); rect(0, 0, W, H, '#05030c'); ctx.globalAlpha = 1;
+  const t = cut.t - (cut.pre || 0);
+  ctx.globalAlpha = Math.min(0.55, cut.t * 1.5); rect(0, 0, W, H, '#05030c'); ctx.globalAlpha = 1;
+  if (cut.pre && cut.t < cut.pre) {
+    // the Dealer from the main menu, big, friendly... then he pulls back his hood
+    const p = cut.t / cut.pre, sc = 3, mx = hk.TX + hk.TW / 2, my = hk.TY + 70;
+    const glitching = p > 0.62;
+    ctx.save();
+    if (glitching) { ctx.globalAlpha = Math.floor(cut.t * 30) % 2 ? 0.4 : 1; ctx.translate(G.rand(-4, 4), 0); }
+    ctx.drawImage(MASCOT, Math.round(mx - MASCOT.width * sc / 2), Math.round(my - MASCOT.height * sc / 2 - (glitching ? (p - 0.62) * 60 : 0)), MASCOT.width * sc, MASCOT.height * sc);
+    ctx.drawImage(LAPTOP, Math.round(mx - LAPTOP.width * sc / 2), Math.round(my + 8), LAPTOP.width * sc, LAPTOP.height * sc);
+    if (glitching) { ctx.globalAlpha = 0.6; ctx.drawImage(tinted(MASCOT, PAL.green), Math.round(mx - MASCOT.width * sc / 2) + 4, Math.round(my - MASCOT.height * sc / 2), MASCOT.width * sc, MASCOT.height * sc); }
+    ctx.restore();
+    drawSpeech();
+    return;
+  }
   drawBack();
   drawBodyNow(1);
   drawHand(0, Math.min(1, presence * 1.1)); drawHand(1, Math.min(1, presence * 1.1));
@@ -692,11 +824,11 @@ function drawCut() {
   if (t > 0.05) { bar(4); bar(H - 30); }
   if (t > 1.8) {
     const p = Math.min(1, (t - 1.8) / 0.25);
+    const b = { ...BOSSES[id], text: id === 'house' ? 'RULES: ' + bossShort(run, 'house') : BOSSES[id].text };
     const cx = hk.TX + hk.TW / 2, yy = hk.TY + hk.TH - 44;
     const off = Math.round((1 - p) * 60);
     ctx.globalAlpha = 0.75 * p; rect(hk.TX, yy - 4, hk.TW, 42, '#05030c');
     ctx.globalAlpha = p;
-    const b = BOSSES[id];
     text(b.name, cx - off, yy, P.col, { align: 'center', scale: 2, outline: PAL.ink });
     text('// ' + P.title + ' //', cx + off, yy + 16, PAL.white, { align: 'center', outline: PAL.ink });
     text(b.text, cx, yy + 27, '#ff9aa2', { align: 'center', outline: PAL.ink });
@@ -708,7 +840,7 @@ function drawCut() {
 
 return {
   setup, active, intro, skip, resume, beforeRoll, afterLand, onScore, bite, react, defeat, gloat,
-  update, drawBack, drawBody, draw, drawActor, drawCage, drawCut,
+  update, drawBack, drawBody, draw, drawActor, drawCage, drawCut, phishReveal, deny,
   /** An exploit changed a die: drop CIPHER's padlock from it. */
   clearLock(i) { locks.delete(i); },
   get inCut() { return !!cut; },

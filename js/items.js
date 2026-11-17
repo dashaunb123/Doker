@@ -548,14 +548,34 @@ const BOSSES = {
   sandbox:    { name: 'SANDBOX',    short: 'PERKS OFFLINE', text: 'YOUR PERKS ARE OFFLINE.' },
   ddos:       { name: 'DDOS',       short: 'ONE DIE STUCK ON 1', text: 'ONE DIE IS STUCK ON 1.' },
   honeypot:   { name: 'HONEYPOT',   short: 'PAIRS SCORE NEGATIVE', text: 'PAIRS SCORE NEGATIVE.' },
+  phisher:    { name: 'PHISHER',    short: 'ONE DIE IS FAKE BAIT', text: 'ONE DIE EACH ROLL IS FAKE BAIT AND COUNTS FOR NOTHING.' },
+  twofa:      { name: '2FA',        short: 'EACH HAND SCORES ONCE', text: 'EACH HAND ONLY SCORES ONCE PER FIREWALL.' },
+  kernelpanic:{ name: 'KERNEL PANIC', short: 'A DIE REROLLS ITSELF', text: 'AFTER YOUR DICE LAND, ONE OF THEM REROLLS.' },
+  trojan:     { name: 'TROJAN',     short: 'A WILDCARD IS INFECTED', text: 'EACH ROLL ONE WILDCARD IS INFECTED AND DOES NOTHING.' },
+  blackout:   { name: 'BLACKOUT',   short: 'DICE HIDDEN, -1 ROLL', text: 'YOUR DICE STAY HIDDEN UNTIL THEY SCORE. ONE FEWER ROLL.' },
+  // the finale: always firewall 8. Runs two other bosses' rules at once (run.houseRules).
+  house:      { name: 'THE HOUSE',  short: 'TWO RULES AT ONCE', text: 'THE DEALER WAS THE HOUSE ALL ALONG. TWO RULES AT ONCE.' },
 };
+const BOSS_POOL = Object.keys(BOSSES).filter(b => b !== 'house');
+/** Which boss rules are live right now (THE HOUSE runs two at once). */
+function bossRules(run) { return !run.boss ? [] : run.boss === 'house' ? run.houseRules || [] : [run.boss]; }
+const ruleOn = (run, id) => bossRules(run).includes(id);
+/** Short rule text for the top bar. */
+function bossShort(run, b) { return b === 'house' ? (run.houseRules || []).map(r => BOSSES[r].name).join(' + ') : BOSSES[b].short; }
 const BOSS_ROUNDS = [4, 8];
 const BOSS_BOUNTY = 2;
 function rollBosses(stake = 1) {
-  const ids = Object.keys(BOSSES).sort(() => Math.random() - 0.5);
+  const ids = BOSS_POOL.slice().sort(() => Math.random() - 0.5);
   const out = {};
-  (stake >= 2 ? [4, 6, 8] : BOSS_ROUNDS).forEach((r, i) => (out[r] = ids[i]));
+  (stake >= 2 ? [4, 6] : [4]).forEach((r, i) => (out[r] = ids[i]));
+  out[8] = 'house';
   return out;
+}
+/** THE HOUSE's two rules: bosses you haven't faced this run, if possible. */
+function rollHouseRules(bosses) {
+  const seen = Object.values(bosses);
+  const fresh = BOSS_POOL.filter(b => !seen.includes(b)).sort(() => Math.random() - 0.5);
+  return fresh.slice(0, 2);
 }
 const bossOf = (run, r = run.round) => (run.bosses || {})[r] || null;
 
@@ -563,7 +583,7 @@ const bossOf = (run, r = run.round) => (run.bosses || {})[r] || null;
 //  PERK ENGINE — dice odds, rolls per firewall, scoring hooks
 // ============================================================
 /** Perks that are working right now (SANDBOX switches them all off). */
-const activePerks = run => (run.boss === 'sandbox' ? [] : run.perks);
+const activePerks = run => (ruleOn(run, 'sandbox') ? [] : ruleOn(run, 'trojan') && run.trojanUid ? run.perks.filter(p => p.uid !== run.trojanUid) : run.perks);
 const perksOf = (run, id) => activePerks(run).filter(p => p.id === id);
 
 function handStats(run, key) {
@@ -580,7 +600,8 @@ function rollsPerRound(run) {
     if (p.id === 'socket') n += p.stats.amt;
     if (p.stats.catchRoll) n -= 1;
   }
-  if (run.boss === 'lag') n = Math.min(n, 7);   // LAG boss: hard cap
+  if (ruleOn(run, 'lag')) n = Math.min(n, 7);   // LAG boss: hard cap
+  if (ruleOn(run, 'blackout')) n -= 1;            // BLACKOUT: one fewer roll
   return Math.max(1, n);
 }
 
@@ -637,8 +658,8 @@ function evalHand(run, faces, phantom = 0) {
   const vals = faces.map(f => (ducky && f === 1 ? 6 : f));
   if (ducky) faces.forEach((f, i) => { if (f === 1) notes.push({ i, txt: '1=6' }); });
   // ENCRYPTION boss: 6s are scrambled and count for nothing
-  const enc = faces.map((_, i) => run.boss === 'encryption' && vals[i] === 6);
-  enc.forEach((e, i) => { if (e) notes.push({ i, txt: 'ENCRYPTED' }); });
+  const enc = faces.map((_, i) => (ruleOn(run, 'encryption') && vals[i] === 6) || (ruleOn(run, 'phisher') && run.phishDie === i));
+  enc.forEach((e, i) => { if (e) notes.push({ i, txt: run.phishDie === i && ruleOn(run, 'phisher') ? 'PHISHED' : 'ENCRYPTED' }); });
   // STONE dice have no face: never part of a hand (they pay +50 chips in the dice phase instead)
   const stone = faces.map((_, i) => dieMod(run, i) === 'stone');
   let dropped = -1;
@@ -778,6 +799,7 @@ function scoreRoll(run, faces, ctx) {
   // wildcards, left to right (order matters for MIRROR)
   const wilds = run.wilds || [];
   wilds.forEach((src, i) => {
+    if (ruleOn(run, 'trojan') && src.uid === run.trojanUid) return;   // infected: does nothing
     let w = src;
     if (src.id === 'mirror') { const r = wilds[i + 1]; w = r && r.id !== 'mirror' ? r : null; }
     if (w) wildSteps(run, w, src, ev, faces, ctx, steps);
