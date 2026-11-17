@@ -118,6 +118,7 @@ Example: `index.html?play&perks=14&auto&ff=60`
 - Rigs/stakes: roadmap in DESIGN.md §10. Unlocks: SCRIPT KIDDIE (win STOCK), GOLDBUG (win WHALE), GLASS CANNON
   (win GOLDBUG), BOTNET (win SCRIPT KIDDIE), PHANTOM (win BOTNET), ROOT (win any rig on stake 4). A stake opens
   after beating the one below with that rig. ICE rules: COLD BOOT (first roll half), NOISE (-1 roll), TAX (-$2).
+  ZERO DAY pays half the unused-roll money (rounded down); switch: ZERO_DAY_RULE in items.js.
   PHANTOM rig's ghost die has no visual of its own yet (it shows up as GHOST notes when it completes a hand).
 
 ## Next steps

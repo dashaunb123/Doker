@@ -470,7 +470,7 @@ const STAKES = [
   { name: 'WHITE HAT',   col: '#f4f4f4', desc: 'THE NORMAL GAME.' },
   { name: 'GREY HAT',    col: '#a9a9bd', desc: 'AN EXTRA BOSS ON FIREWALL 6.' },
   { name: 'BLACK HAT',   col: '#5a5478', desc: 'TARGETS ARE 25% HIGHER.' },
-  { name: 'ZERO DAY',    col: '#e43b44', desc: 'UNUSED ROLLS NO LONGER PAY $1.' },
+  { name: 'ZERO DAY',    col: '#e43b44', desc: 'UNUSED ROLLS ONLY PAY HALF (ROUNDED DOWN).' },
   { name: 'ICE',         col: '#2ce8f5', desc: 'NORMAL FIREWALLS GET A SMALL ICE RULE.' },
   { name: 'HONEYNET',    col: '#feae34', desc: 'SHOP PRICES +$1. REROLLS START AT $3.' },
   { name: 'TRACE',       col: '#ff3df2', desc: 'EVERY 3RD BUST RAISES THE TARGET BY 10%.' },
@@ -484,8 +484,9 @@ const ICE = {
 };
 const ICE_IDS = Object.keys(ICE);
 const stakeOf = run => run.stake || 1;
-// ZERO DAY (stake 4+) changes how unused rolls pay out at a breach. 'none' = no payout (current rule).
-let ZERO_DAY_RULE = 'none';
+// ZERO DAY (stake 4+) changes how unused rolls pay out at a breach: 'half' (current) | 'cap3' | 'none'.
+// Balance sim (tools/balance), stake 4 win rate for the random bot: none 1.4%, half 5.5%, cap3 5.8%.
+let ZERO_DAY_RULE = 'half';
 function unusedRollPay(run) {
   const n = run.rollsLeft;
   if (n <= 0) return 0;

@@ -201,7 +201,7 @@ shop +$1) · SCRIPT KIDDIE (random perk + exploit) · GOLDBUG (all dice GOLD, mo
 (3 exploit slots, starts with FORCE; unlock by winning any rig on stake 4).
 
 **Stakes** (cumulative difficulty per rig, sticker shows best beaten): WHITE HAT · GREY HAT (extra boss on round 6) ·
-BLACK HAT (targets +25%) · ZERO DAY (no unused-roll payout) · ICE (normal firewalls get a mini-boss rule) ·
+BLACK HAT (targets +25%) · ZERO DAY (unused rolls pay half, rounded down — was no payout; softened after the balance sim) · ICE (normal firewalls get a mini-boss rule) ·
 HONEYNET (shop +$1, rerolls start $3) · TRACE (every 3rd bust raises the target 10%) · SINGULARITY (9 rolls, bosses
 get a second rule).
 
