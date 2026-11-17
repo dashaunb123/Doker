@@ -304,18 +304,22 @@ function rollPackType() {
 
 /** n random items from the given pools, no repeats of the same perk or hand. */
 function rollItems(n, pool, boost = 1) {
-  const out = [], usedPerks = [], usedHands = [], usedWilds = [];
+  const out = [], usedPerks = [], usedHands = [], usedWilds = [], usedMods = [], usedHacks = [];
   for (let i = 0; i < n; i++) {
     const kind = _pick(pool);
     const r = RARITY.roll(boost);
     if (kind === 'diemod') {
-      let t = Math.random() * DIEMOD_IDS.reduce((a, e) => a + RARITY.weights[DIEMOD_DEFS[e].rarity] ** 0.5, 0), id = DIEMOD_IDS[0];
-      for (const e of DIEMOD_IDS) if ((t -= RARITY.weights[DIEMOD_DEFS[e].rarity] ** 0.5) < 0) { id = e; break; }
+      const opts = DIEMOD_IDS.filter(e => !usedMods.includes(e)).length ? DIEMOD_IDS.filter(e => !usedMods.includes(e)) : DIEMOD_IDS;
+      let t = Math.random() * opts.reduce((a, e) => a + RARITY.weights[DIEMOD_DEFS[e].rarity] ** 0.5, 0), id = opts[0];
+      for (const e of opts) if ((t -= RARITY.weights[DIEMOD_DEFS[e].rarity] ** 0.5) < 0) { id = e; break; }
+      usedMods.push(id);
       out.push(makeDieMod(id));
     } else if (kind === 'exploit') {
       // cheaper hacks show up more often
-      let t = Math.random() * EXPLOIT_IDS.reduce((a, e) => a + RARITY.weights[EXPLOIT_DEFS[e].rarity] ** 0.5, 0), id = EXPLOIT_IDS[0];
-      for (const e of EXPLOIT_IDS) if ((t -= RARITY.weights[EXPLOIT_DEFS[e].rarity] ** 0.5) < 0) { id = e; break; }
+      const opts = EXPLOIT_IDS.filter(e => !usedHacks.includes(e)).length ? EXPLOIT_IDS.filter(e => !usedHacks.includes(e)) : EXPLOIT_IDS;
+      let t = Math.random() * opts.reduce((a, e) => a + RARITY.weights[EXPLOIT_DEFS[e].rarity] ** 0.5, 0), id = opts[0];
+      for (const e of opts) if ((t -= RARITY.weights[EXPLOIT_DEFS[e].rarity] ** 0.5) < 0) { id = e; break; }
+      usedHacks.push(id);
       out.push(makeExploit(id));
     } else if (kind === 'wild') {
       // rarer wildcards show up less: weight by rarity
