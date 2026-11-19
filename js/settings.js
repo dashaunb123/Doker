@@ -12,6 +12,7 @@ const SET_DEFAULTS = {
   speed: 1,                  // game speed: 1 | 1.5 | 2 | 3
   bossIntro: 'always',       // 'always' | 'first' (only the first time you meet each boss)
   seenBosses: [],
+  handle: '',                // VERSUS name (picked at random the first time)
 };
 const SET = (() => {
   try { return { ...SET_DEFAULTS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch (e) { return { ...SET_DEFAULTS }; }

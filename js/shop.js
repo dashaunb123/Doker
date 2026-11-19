@@ -583,7 +583,7 @@ function render() {
       G.blitC(DIE.bone[b.face], b.x + b.w / 2, b.y + b.h / 2, 1);
     } else UI.button(b, hoverBtn === i);
   });
-  G.drawTicker(TICK);
+  if (!NET.drawTabs()) G.drawTicker(TICK);   // VERSUS: the other players' tabs replace the ticker
 }
 
 // ------------------------------------------------------------

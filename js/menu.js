@@ -657,6 +657,7 @@ function drawTerminal() {
 // ============================================================
 //  TICKER + CORNER INFO
 // ============================================================
+const LOBBY_TICKER = '*** VERSUS *** SAME BOSSES, YOUR OWN LUCK *** ROOT THE SYSTEM WITH THE MOST CREDITS *** THE TABS AT THE BOTTOM SHOW WHERE EVERYONE IS *** ESC MID-RUN TWICE TO FORFEIT ';
 const TICKER = '*** WELCOME TO DOKER *** CLICK ANYWHERE TO THROW DICE *** FIVE OF A KIND PAYS 50X *** THE HOUSE ALWAYS WINS... UNLESS YOU HACK IT *** ARROWS + ENTER TO NAVIGATE *** M = MUTE   N = MUSIC   C = CRT   F = FULLSCREEN ';
 function drawTicker(str = TICKER) {
   rect(0, 205, W, 11, PAL.ink);
@@ -717,6 +718,8 @@ function startMenu() {
   MUSIC.play('menu');
   termPush('> CONNECTED: HOUSE.SERVER');
   termPush('> WELCOME BACK, PLAYER_1');
+  // opened a VERSUS link (?room=...): straight to that match's lobby
+  if (params.get('room') && !NET.active) { NET.joinRoom(params.get('room')); goTo('lobby'); }
 }
 
 // ============================================================
@@ -728,11 +731,12 @@ for (let i = BLOCK_ORDER.length - 1; i > 0; i--) {
   const j = Math.floor(Math.random() * (i + 1));
   [BLOCK_ORDER[i], BLOCK_ORDER[j]] = [BLOCK_ORDER[j], BLOCK_ORDER[i]];
 }
-let trans = null;
+let trans = null, queuedScene = null;
 const TRANS_HALF = 0.32;
 
-function goTo(scene) {
-  if (trans) return;
+/** queue = true: the match server said so, so don't drop it if a wipe is already running (it plays next). */
+function goTo(scene, queue) {
+  if (trans) { if (queue) queuedScene = scene; return; }
   trans = { t: 0, to: scene, swapped: false };
   SFX.glitch(); SFX.whoosh();
 }
@@ -743,11 +747,14 @@ function updateTrans(dt) {
     state = trans.to;
     if (state !== 'play') TUT.stop();
     if (state === 'play') { PLAY.enter(); MUSIC.play(PLAY.track()); }
-    else if (state === 'options') MUSIC.play('menu');
+    else if (state === 'options' || state === 'lobby') MUSIC.play('menu');
     else { menuT = 0; refreshButtons(); logo.landed = [0, 0, 0, 0, 0]; MUSIC.play('menu'); }
     glitchT = 0.2;
   }
-  if (trans.t >= TRANS_HALF * 2) trans = null;
+  if (trans.t >= TRANS_HALF * 2) {
+    trans = null;
+    if (queuedScene) { const q = queuedScene; queuedScene = null; if (q !== state) goTo(q); }
+  }
 }
 function drawWipe() {
   const p = trans.t < TRANS_HALF ? trans.t / TRANS_HALF : 1 - (trans.t - TRANS_HALF) / TRANS_HALF;
@@ -810,6 +817,7 @@ function update(dt) {
   if (flash > 0) flash = Math.max(0, flash - dt * 3);
 
   if (trans) updateTrans(dt);
+  NET.tick(dt);
 
   if (state === 'boot') {
     bootT += dt;
@@ -854,6 +862,7 @@ function update(dt) {
     return;
   }
   if (state === 'options') { OPTIONS.update(dt); return; }
+  if (state === 'lobby') { NET.update(dt); return; }
 
   menuT += dt;
   for (let i = 0; i < btnHoverT.length; i++) btnHoverT[i] += dt;
@@ -903,6 +912,7 @@ function render() {
   if (state === 'boot') renderBoot();
   else if (state === 'play') { PLAY.render(); TUT.render(); }
   else if (state === 'options') { drawBackground(); drawRain(0.22); OPTIONS.render(); drawTicker(); }
+  else if (state === 'lobby') { drawBackground(); drawRain(0.22); NET.render(); drawTicker(LOBBY_TICKER); }
   else renderMenu();
   ctx.restore();
   if (glitchT > 0 && SET.flashes) postGlitch();
@@ -910,7 +920,7 @@ function render() {
   if (trans) drawWipe();
   if (params.has('ff')) { rect(0, 0, W, 9, '#000000'); text(document.title.slice(0, 63), 1, 1, document.title.startsWith('FF OK') ? PAL.green : PAL.red); }
   if (mouse.inside) {
-    const hot = state === 'options' ? OPTIONS.hot() : state === 'play' ? PLAY.hot()
+    const hot = state === 'options' ? OPTIONS.hot() : state === 'lobby' ? NET.hot() : state === 'play' ? PLAY.hot()
       : state === 'menu' && (hoverBtn >= 0 || hoverMascot || hoverCard >= 0 || hoverDeco >= 0 || hoverLogoDie);
     blit(hot ? CURSOR_HOT : CURSOR, mouse.x, mouse.y);
   }
@@ -927,6 +937,7 @@ window.G = {
   flash: a => { flash = Math.max(flash, a * flashScale()); },
   toggleFullscreen, startTutorial,
   get T() { return T; },
+  get state() { return state; },
 };
 
 // dev: ?skipboot&ff=3 fast-forwards the simulation N seconds (for screenshots)
@@ -1001,6 +1012,7 @@ addEventListener('pointerdown', e => {
   if (trans || !mouse.inside) return;
   if (state === 'play') { if (TUT.onPointer(mouse.x, mouse.y)) return; return PLAY.onPointer(mouse.x, mouse.y); }
   if (state === 'options') return OPTIONS.onPointer(mouse.x, mouse.y);
+  if (state === 'lobby') return NET.onPointer(mouse.x, mouse.y);
   if (menuT < 1) return;
   if (offer) { const b = offerHit(mouse.x, mouse.y); if (b >= 0) OFFER_BTNS[b].act(); return; }
   const { x, y } = mouse;
@@ -1020,6 +1032,7 @@ addEventListener('keydown', e => {
   if (state === 'boot') { if (bootDone()) startMenu(); else bootT = 999; return; }
   const k = e.key.toLowerCase();
   if (state === 'options' && !trans && OPTIONS.typing()) { OPTIONS.onKey(e.key); e.preventDefault(); return; }   // typing CONFIRM
+  if (state === 'lobby' && !trans && NET.typing()) { NET.onKey(e.key); e.preventDefault(); return; }         // typing a VERSUS name
   if (k === 'm') { SFX.muted = !SFX.muted; return; }
   if (k === 'n') { MUSIC.toggle(); return; }
   if (k === 'c') { SET.crt = !SET.crt; applyCrt(); saveSettings(); return; }
@@ -1027,6 +1040,7 @@ addEventListener('keydown', e => {
   if (trans) return;
   if (state === 'play') { if (k === ' ' || k === 'enter') e.preventDefault(); if (TUT.onKey(k)) return; return PLAY.onKey(k); }
   if (state === 'options') { if (OPTIONS.onKey(e.key)) e.preventDefault(); return; }
+  if (state === 'lobby') { if (NET.onKey(e.key)) e.preventDefault(); return; }
   if (menuT < 1) return;
   if (offer) {
     if (k === 'arrowleft' || k === 'arrowright' || k === 'a' || k === 'd' || k === 'tab') { offer.sel = 1 - offer.sel; SFX.hover(); }
