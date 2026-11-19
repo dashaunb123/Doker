@@ -8,6 +8,7 @@ sound — is generated in code. No build step, no dependencies, no assets.
 ## Run it
 
 Double-click `index.html` (any modern browser). Sound starts after the first click/key.
+To let people on your Wi-Fi play: `python3 tools/serve.py` (serves only the game files, prints the link).
 
 Controls: mouse, or **Space** = roll · **Esc** = back to menu · **M** = mute all ·
 **N** = music on/off · **C** = CRT scanlines on/off · **F** = fullscreen.
@@ -37,6 +38,7 @@ Controls: mouse, or **Space** = roll · **Esc** = back to menu · **M** = mute a
 | Announcer voice (ElevenLabs) — only DOKER is voiced (user's call); straight/full/four takes kept in `assets/voice/` but unused | Done |
 | DOKER!! event (five of a kind): cutscene, DOKER party track, announcer scream | Done |
 | Boss characters (`js/boss.js`, sprites in `js/bossart.js`): intro cutscene, live on the felt, physically enforce their rule | Done |
+| VERSUS (online, up to 4 players via Cotchu rooms): host from the rig picker, share a link, lobby, same bosses for everyone, player tabs along the bottom, match board + rematch | Done |
 | Dealer reactions, upgrades (vouchers) | Planned |
 | Extra hand types (Small Straight, Parity, Bookends) | Needs precedence rules first |
 | Seeds / daily run, endless mode | Parked |
@@ -67,6 +69,7 @@ Plain `<script>` files (no modules, so it runs from `file://`). Load order matte
 | `js/settings.js` | Player settings `SET` (volumes, announcer, CRT, shake, flashes, game speed, boss intros, bosses met) in `localStorage['doker.settings']`; loaded before audio.js |
 | `js/tutorial.js` | Scripted tutorial (`TUT`): 3-firewall rigged run (`run.tutorial`), coach box + highlights, click gating; offered on first PLAY (`SET.tutorialOffered`), replay from OPTIONS, dev `?play&tutorial` |
 | `js/options.js` | OPTIONS scene (state `'options'` in menu.js): settings rows, CONTROLS panel, RESET PROGRESS (type CONFIRM) |
+| `js/net.js` | VERSUS (`NET`): Cotchu rooms, the lobby + match board (state `'lobby'` in menu.js), the player tabs drawn in the bottom strip of the table/shop |
 
 Internal resolution is 384×216, scaled up in whole-pixel steps.
 
@@ -75,6 +78,27 @@ Internal resolution is 384×216, scaled up in whole-pixel steps.
 **Autosave:** saved at round start, after every roll (the roll is spent the moment the dice leave), after a breach
 payout, and after every Black Market action (stock and open packs are restored). Cleared on win/loss.
 The last uncaught error is kept in `localStorage['doker.lastError']`.
+
+## VERSUS (online matches)
+
+- **Service:** [Cotchu](https://cotchu.com/llms.txt) shared rooms. SDK `cotchu@0.1.0`, loaded from jsDelivr with a
+  dynamic `import()` only when someone opens a versus lobby, so solo play never touches the network and still runs
+  from `file://`. The `pk_live_…` key in `js/net.js` is a *publishable* key (Cotchu says it's safe in game code).
+  Never put an `sk_…` key in the game.
+- **Flow:** rig picker → VERSUS (or `V`) → lobby with a share link `…/?room=doker-xxxxxxxx` → host presses START →
+  everyone plays their own run → when a run ends, MATCH > opens the board → host can REMATCH.
+- **Fair setup:** the host rolls bosses, THE HOUSE's rules and ICE once and puts them in the room; dice, shops and
+  rig loadout items stay each player's own luck. Everyone uses the host's rig + stake.
+- **Who wins:** rooted beats not rooted, then furthest firewall, then most credits. (So a survivor still has to get
+  further than the dead player; if both root it, money decides.)
+- **Room state:** `match` (setup + roster), `players.<id>` (name, st, round, money; ~4 updates/s, only on change),
+  `results.<n>.<id>` (written once a run ends; outlives the seat, since the room deletes `players.<id>` on leave).
+- **Leaving:** ESC / MENU mid-run asks twice (it forfeits). Closing the tab: shown OFFLINE within ~5 s, counted as
+  LEFT after Cotchu's 60 s seat window. A reload within 60 s resumes the same seat *and* run (versus runs autosave
+  to `localStorage['doker.save.versus']`, apart from the solo save).
+- **Hosting:** the share link points at wherever the page is served (GitHub Pages, `tools/serve.py` on the LAN, …).
+  Cotchu: 50 open rooms per project; rooms close a minute after the last player leaves. If the project lists
+  allowed origins, the hosting site must be on it (`localhost` always works).
 
 ## Dev URL flags (for testing)
 
@@ -94,6 +118,7 @@ Append to `index.html`:
 - `&exploits=force,nuke` — start holding those exploits (max 2)
 - `&doker` (or `&doker=4`) — the first roll is five of a kind, to see the DOKER!! event
 - `&round=4&boss=ddos` — jump to a firewall, optionally forcing its boss
+- `?room=doker-xxxxxxxx` — join that VERSUS match (what the share link does)
 
 Example: `index.html?play&perks=14&auto&ff=60`
 

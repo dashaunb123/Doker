@@ -43,7 +43,8 @@ const badgePop = new Map();
 let felt = null;
 let auto = false;
 
-let pendingContinue = false, pendingTutorial = false;
+let pendingContinue = false, pendingTutorial = false, pendingVersus = null;   // pendingContinue: false | true (solo) | 'versus'
+let forfeitT = 0;            // versus: ESC once arms the forfeit, ESC again inside this window confirms
 let dokerEv = null, forceFaces = null;
 // HACK WINDOW: after the dice land (and the boss has had its turn) you may fire exploits before the roll scores
 let hack = null;             // { sel: exploit index | -1, step: null|'die'|'face'|'nudge'|'target', die, src }
@@ -55,14 +56,16 @@ const DOKER_LEN = 3.6;
 
 // ---------- autosave (so a crash or a trip to the menu never wipes a run) ----------
 const SAVE_KEY = 'doker.save.v1';
+const VS_SAVE_KEY = 'doker.save.versus';   // a versus run saves apart, so it never clobbers your solo CONTINUE
+const saveKey = () => (run && run.versus ? VS_SAVE_KEY : SAVE_KEY);
 function saveRun(phase, extra) {
   if (run && run.tutorial) return;   // the tutorial never touches your saved run
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, phase, run, ...extra })); } catch (e) { /* storage blocked */ }
+  try { localStorage.setItem(saveKey(), JSON.stringify({ v: 1, phase, run, ...extra })); } catch (e) { /* storage blocked */ }
 }
-function loadSave() {
-  try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); return d && d.v === 1 && d.run ? d : null; } catch (e) { return null; }
+function loadSave(key = SAVE_KEY) {
+  try { const d = JSON.parse(localStorage.getItem(key)); return d && d.v === 1 && d.run ? d : null; } catch (e) { return null; }
 }
-function clearSave() { if (run && run.tutorial) return; try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } }
+function clearSave() { if (run && run.tutorial) return; try { localStorage.removeItem(saveKey()); } catch (e) { /* ignore */ } }
 
 const slotX = i => SX0 + i * (SLOT + GAP);
 const wslotX = s => wildX0() + s * (WW + WG);
@@ -155,16 +158,17 @@ function enter() {
     face: i + 1, theme: 'bone', phase: 'idle', t: 0, delay: 0, final: 1, flipTo: 0, flips: 0,
     h: 0, sq: 1, sx: 1, sy: 1, jx: 0, flash: 0, pop: 0, trail: [], scoring: false, label: '', entered: false,
   }));
-  if (pendingContinue && continueRun()) { pendingContinue = false; return; }
+  if (pendingContinue && continueRun(pendingContinue === 'versus' ? VS_SAVE_KEY : SAVE_KEY)) { pendingContinue = false; return; }
   pendingContinue = false;
+  if (pendingVersus) { const m = pendingVersus; pendingVersus = null; newRun(m.rig, m.stake, false, m); return; }
   if (pendingTutorial) { pendingTutorial = false; newRun('stock', 1, true); TUT.start(); return; }
   if (devQuick) { devQuick = false; newRun(devRig.rig, devRig.stake); return; }
   openSetup();
 }
 
 /** Resume the autosaved run. Returns false if there is nothing (valid) to resume. */
-function continueRun() {
-  const d = loadSave();
+function continueRun(key = SAVE_KEY) {
+  const d = loadSave(key);
   if (!d) return false;
   run = d.run;
   run.wilds = run.wilds || [];
@@ -192,7 +196,7 @@ function continueRun() {
   return true;
 }
 
-function newRun(rig = 'stock', stake = 1, tutorial = false) {
+function newRun(rig = 'stock', stake = 1, tutorial = false, versus = null) {
   run = {
     rig, stake,
     round: 0, target: 0, score: 0, rollsLeft: 0, rollsRound: 0, money: rig === 'whale' ? 20 : RULES.START_MONEY, rollsUsed: 0,
@@ -201,6 +205,12 @@ function newRun(rig = 'stock', stake = 1, tutorial = false) {
   };
   run.houseRules = rollHouseRules(run.bosses, stake >= 2 && KNOBS.greyHat === 'house3' ? 3 : 2);
   if (tutorial) { run.tutorial = true; run.bosses = { 3: 'ddos' }; run.houseRules = []; }   // scripted: see js/tutorial.js
+  if (versus) {   // VERSUS (js/net.js): everyone faces the same bosses and ICE; dice + shops stay your own luck
+    run.versus = { room: versus.room, n: versus.n };
+    run.bosses = { ...versus.bosses };
+    run.houseRules = (versus.houseRules || []).slice();
+    run.iceFixed = versus.ice || null;
+  }
   // rig loadouts
   if (rig === 'goldbug') run.dieMods = ['gold', 'gold', 'gold', 'gold', 'gold'];
   if (rig === 'glasscannon') run.dieMods = ['glass', 'glass', 'glass', 'glass', 'glass'];
@@ -219,7 +229,7 @@ function startRound(r) {
   run.target = targetFor(run, r);
   run.bustCount = 0;
   // ICE (stake 5+): normal firewalls from round 2 get a small rule; on SINGULARITY bosses bring one too
-  run.ice = stakeOf(run) >= 5 && r >= 2 && (!bossOf(run, r) || stakeOf(run) >= 8) ? _pick(ICE_IDS) : null;
+  run.ice = stakeOf(run) >= 5 && r >= 2 && (!bossOf(run, r) || stakeOf(run) >= 8) ? (run.iceFixed && run.iceFixed[r]) || _pick(ICE_IDS) : null;
   run.score = 0; shownScore = 0;
   run.boss = bossOf(run);
   const av = run.boss && wildsOf(run, 'antivirus')[0];
@@ -751,6 +761,14 @@ function setupStart() {
   SFX.select(); G.glitch(0.3);
   newRun(rig, setup.stake);
 }
+/** Host a VERSUS match with this rig + stake: off to the lobby to share the link. */
+function setupVersus() {
+  const rig = RIGS[setup.rig].id;
+  if (!rigUnlocked(profile, rig) || !stakeUnlocked(profile, rig, setup.stake)) { SFX.deny(); return; }
+  SFX.select();
+  NET.host(rig, setup.stake);
+  G.goTo('lobby');
+}
 function drawSetup() {
   const { rect, rrect, text, ctx, T } = G;
   const r = RIGS[setup.rig], open = rigUnlocked(profile, r.id), st = STAKES[setup.stake - 1];
@@ -789,7 +807,8 @@ function drawSetup() {
   const stakeNote = stOpen ? st.desc : !open ? 'UNLOCK THIS RIG FIRST' : 'LOCKED: BEAT ' + STAKES[setup.stake - 2].name + ' WITH THIS RIG';
   text(stakeNote, CX, sy + 15, stOpen ? '#c9c3ea' : PAL.red, { align: 'center' });
   if (stOpen && setup.stake > 1) text('+ ALL STAKES BELOW', CX, sy + 24, '#6b5fa8', { align: 'center' });
-  btns.push({ x: CX - 50, y: TY + TH - 19, w: 100, h: 14, label: 'START RUN >', act: setupStart, ...UI.BTN.green, disabled: !stOpen });
+  btns.push({ x: CX - 104, y: TY + TH - 19, w: 100, h: 14, label: 'SOLO RUN >', act: setupStart, ...UI.BTN.green, disabled: !stOpen });
+  btns.push({ x: CX + 4, y: TY + TH - 19, w: 100, h: 14, label: 'VERSUS >', act: setupVersus, ...UI.BTN.purple, disabled: !stOpen });
   btns.forEach((b, i) => UI.button(b, hoverBtn === i));
 }
 function drawSetupSidebar() {
@@ -805,6 +824,7 @@ function drawSetupSidebar() {
   });
   text('ARROWS PICK', x, 160, '#5a4c99');
   text('ENTER STARTS', x, 170, '#5a4c99');
+  text('V = VERSUS', x, 180, '#5a4c99');
 }
 
 /** Bottom strip (the old how-to-play ticker lives in the tutorial now). */
@@ -862,6 +882,7 @@ function badgeXY(k) {
 
 function update(dt) {
   enterT += dt; modeT += dt;
+  if (forfeitT > 0) forfeitT -= dt;
   const m = G.mouse;
 
   // ---- timed events (run even in the shop so nothing gets stuck) ----
@@ -1424,7 +1445,8 @@ function drawOverlay() {
     text('SCORED ' + fmtNum(run.score) + ' / ' + fmtNum(run.target), CX, y0 + 46, '#a99be0', { align: 'center' });
     text('SHORT BY ' + fmtNum(run.target - run.score), CX, y0 + 58, PAL.gold, { align: 'center' });
     text(run.perks.length + ' PERKS OWNED', CX, y0 + 70, '#8a7fc0', { align: 'center' });
-    if (ot > 0.8) {
+    if (ot > 0.8 && run.versus) versusButtons(y0);
+    else if (ot > 0.8) {
       btns.push({ x: CX - 66, y: y0 + 98, w: 62, h: 15, label: 'RETRY', act: () => { SFX.select(); newRun(run.rig, run.stake); }, ...UI.BTN.green });
       btns.push({ x: CX + 4, y: y0 + 98, w: 62, h: 15, label: 'MENU', act: () => { SFX.select(); G.goTo('menu'); }, ...UI.BTN.blue });
     }
@@ -1434,12 +1456,19 @@ function drawOverlay() {
     text('CREDITS $' + run.money, CX, y0 + 46, PAL.gold, { align: 'center' });
     text(RIG[run.rig || 'stock'].name + ' // ' + STAKES[stakeOf(run) - 1].name, CX, y0 + 58, STAKES[stakeOf(run) - 1].col, { align: 'center' });
     (run.unlocked || []).slice(0, 2).forEach((u, k) => text('UNLOCKED ' + u, CX, y0 + 69 + k * 12, PAL.green, { align: 'center' }));
-    if (ot > 0.8) {
+    if (ot > 0.8 && run.versus) versusButtons(y0);
+    else if (ot > 0.8) {
       btns.push({ x: CX - 66, y: y0 + 98, w: 62, h: 15, label: 'NEW RUN', act: () => { SFX.select(); openSetup(); }, ...UI.BTN.green });
       btns.push({ x: CX + 4, y: y0 + 98, w: 62, h: 15, label: 'MENU', act: () => { SFX.select(); G.goTo('menu'); }, ...UI.BTN.blue });
     }
   }
   btns.forEach((b, i) => UI.button(b, hoverBtn === i));
+}
+
+/** VERSUS: your run is over, so the buttons lead to the match board (or out of the match). */
+function versusButtons(y0) {
+  btns.push({ x: CX - 66, y: y0 + 98, w: 62, h: 15, label: 'MATCH >', act: () => { SFX.select(); G.goTo('lobby'); }, ...UI.BTN.purple });
+  btns.push({ x: CX + 4, y: y0 + 98, w: 62, h: 15, label: 'LEAVE', act: () => { SFX.select(); NET.leave(); G.goTo('menu'); }, ...UI.BTN.blue });
 }
 
 function drawHUD() {
@@ -1496,6 +1525,7 @@ function render() {
     drawSidebar();
     drawHUD();
     drawFloats();
+    drawForfeit();
     return;
   }
   if (mode === 'setup') {
@@ -1544,15 +1574,37 @@ function render() {
       CX, 153, run.rollsLeft === 1 ? PAL.red : PAL.gold, { align: 'center', shadow: PAL.ink });
 
   drawFooter();
+  NET.drawTabs();
   drawDokerEvent();
   BOSS.drawCut();
+  drawForfeit();
 }
 
 // ------------------------------------------------------------
 //  input
 // ------------------------------------------------------------
+/** Leaving the table. In VERSUS that forfeits, so it takes a second press; once your run is over it opens the match board. */
+function leaveTable() {
+  if (!versusLive()) { SFX.select(); G.goTo('menu'); return; }
+  if (mode === 'failed' || mode === 'won') { SFX.select(); G.goTo('lobby'); return; }
+  if (forfeitT > 0) { SFX.deny(); NET.forfeit(); G.goTo('menu'); return; }
+  forfeitT = 2.5; SFX.deny();
+}
+/** The 'press again to forfeit' banner (VERSUS). */
+function drawForfeit() {
+  if (forfeitT <= 0) return;
+  const { rect, text, ctx } = G;
+  const w = 200, h = 28, x = Math.round((G.W - w) / 2), y = 92;
+  ctx.globalAlpha = Math.min(1, forfeitT * 3);
+  rect(x - 2, y - 2, w + 4, h + 4, PAL.ink); rect(x - 1, y - 1, w + 2, h + 2, PAL.red); rect(x, y, w, h, '#1a0610');
+  text('LEAVING FORFEITS THE MATCH', G.W / 2, y + 5, PAL.red, { align: 'center' });
+  text('PRESS ESC / MENU AGAIN TO QUIT', G.W / 2, y + 16, '#c9c3ea', { align: 'center' });
+  ctx.globalAlpha = 1;
+}
+const versusLive = () => !!(run && run.versus && mode !== 'setup');
+
 function onPointer() {
-  if (menuHover) { SFX.select(); G.goTo('menu'); return; }
+  if (menuHover) { leaveTable(); return; }
   if (mode === 'setup') { const b = btns[hoverBtn]; if (b) { if (b.disabled) SFX.deny(); else b.act(); } return; }
   if (mode === 'shop') { SHOP.onPointer(); return; }
   if (mode === 'bossintro') { BOSS.skip(); return; }
@@ -1573,13 +1625,14 @@ function onPointer() {
   if (hover >= 0) rollAll();
 }
 function onKey(k) {
-  if (k === 'escape' || k === 'backspace') { SFX.select(); G.goTo('menu'); return; }
+  if (k === 'escape' || k === 'backspace') { leaveTable(); return; }
   if (mode === 'setup') {
     if (k === 'arrowleft' || k === 'a') setupMove(-1, 0);
     else if (k === 'arrowright' || k === 'd') setupMove(1, 0);
     else if (k === 'arrowup' || k === 'w') setupMove(0, 1);
     else if (k === 'arrowdown' || k === 's') setupMove(0, -1);
     else if (k === ' ' || k === 'enter') setupStart();
+    else if (k === 'v') setupVersus();
     return;
   }
   if (mode === 'shop') { SHOP.onKey(k); return; }
@@ -1612,7 +1665,11 @@ return {
   track,
   debugRound(r, boss) { if (boss) run.bosses[r] = boss; startRound(r); },
   hasSave: () => !!loadSave(),
-  queueContinue() { pendingContinue = true; },
+  /** kind 'versus' resumes the versus save (after a reload mid-match). */
+  queueContinue(kind) { pendingContinue = kind === 'versus' ? 'versus' : true; },
+  /** Next enter() starts a VERSUS run: { room, n, rig, stake, bosses, houseRules, ice }. */
+  startVersus(m) { pendingVersus = m; pendingContinue = false; pendingTutorial = false; devQuick = false; },
+  hasVersusSave(roomName, n) { const d = loadSave(VS_SAVE_KEY); return !!(d && d.run.versus && d.run.versus.room === roomName && d.run.versus.n === n); },
   /** Next enter() starts the scripted tutorial run. */
   startTutorial() { pendingTutorial = true; pendingContinue = false; devQuick = false; },
   newGame() { openSetup(); },
